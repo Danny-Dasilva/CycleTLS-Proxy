@@ -69,10 +69,31 @@ type ParamBrowserModel struct {
 	statusTime int64  // Timestamp for status message expiry
 }
 
+// LegendItem represents the complexity legend as a non-selectable list item
+type LegendItem struct{}
+
+// FilterValue implements list.Item interface
+func (l LegendItem) FilterValue() string {
+	return "legend complexity guide"
+}
+
+// Title returns the legend title
+func (l LegendItem) Title() string {
+	return "🟢 Basic  🟡 Intermediate  🔵 Advanced"
+}
+
+// Description returns the legend description
+func (l LegendItem) Description() string {
+	return "Complexity guide for all parameters below"
+}
+
 // NewParamBrowserModel creates a new parameter browser model
 func NewParamBrowserModel(port string) ParamBrowserModel {
 	// Define all parameters
 	parameters := []list.Item{
+		// Add complexity legend as first item
+		LegendItem{},
+
 		// Required proxy headers
 		Parameter{
 			Name:            "X-URL",
@@ -237,7 +258,12 @@ func NewParamBrowserModel(port string) ParamBrowserModel {
 	paramList.SetShowStatusBar(false)
 	paramList.SetFilteringEnabled(true)
 	paramList.SetShowTitle(true) // Explicitly ensure title is always shown
-	paramList.Title = "📋 Parameters\n🟢 Basic  🟡 Intermediate  🔵 Advanced"
+	paramList.Title = "📋 Parameters"
+	
+	// Start with the second item selected (skip legend item)
+	if len(parameters) > 1 {
+		paramList.Select(1) // Select X-URL (first real parameter)
+	}
 
 	return ParamBrowserModel{
 		list: paramList,
@@ -363,14 +389,35 @@ func (m ParamBrowserModel) Update(msg tea.Msg) (ParamBrowserModel, tea.Cmd) {
 		}
 
 		if m.focused == 0 {
+			// Handle navigation keys to skip legend item
+			key := msg.String()
+			currentIndex := m.list.Index()
+			
+			// Handle special navigation cases for legend item
+			if key == "up" || key == "k" {
+				if currentIndex == 1 {
+					// Already at first real parameter, don't go to legend
+					return m, nil
+				}
+			} else if key == "home" {
+				// Home should go to first real parameter, not legend
+				m.list.Select(1)
+				m.viewport.SetContent(m.getDetailContent())
+				return m, nil
+			}
+			
 			// Forward to list (handles up/down/navigation)
 			var cmd tea.Cmd
 			m.list, cmd = m.list.Update(msg)
 			cmds = append(cmds, cmd)
+			
+			// Ensure we never land on legend item
+			if m.list.Index() == 0 {
+				m.list.Select(1) // Jump to first real parameter
+			}
 
 			// Update viewport content when selection might have changed
 			// Check for any navigation or selection keys
-			key := msg.String()
 			if key == "up" || key == "down" || key == "j" || key == "k" ||
 				key == "enter" || key == "pgup" || key == "pgdown" ||
 				key == "home" || key == "end" {
@@ -541,6 +588,11 @@ func (m ParamBrowserModel) getDetailContent() string {
 		return "Select a parameter to see details..."
 	}
 
+	// Handle legend item selection
+	if _, ok := selectedItem.(LegendItem); ok {
+		return m.getLegendDetailContent()
+	}
+
 	param, ok := selectedItem.(Parameter)
 	if !ok {
 		return "Error loading parameter details"
@@ -577,7 +629,7 @@ func (m ParamBrowserModel) getDetailContent() string {
 	}
 
 	complexityStyle := styles.InfoStyle.MarginBottom(1)
-	content.WriteString(complexityStyle.Render(fmt.Sprintf("🏷️ Complexity: %s %s", complexityIcon, complexityText)))
+	content.WriteString(complexityStyle.Render(fmt.Sprintf("Complexity: %s %s", complexityIcon, complexityText)))
 	content.WriteString("\n\n")
 
 	// Description
@@ -617,6 +669,45 @@ func (m ParamBrowserModel) getDetailContent() string {
 
 	// Usage notes based on parameter type
 	content.WriteString(m.getUsageNotes(param))
+
+	return content.String()
+}
+
+// getLegendDetailContent generates content for the legend item
+func (m ParamBrowserModel) getLegendDetailContent() string {
+	var content strings.Builder
+
+	// Header
+	headerStyle := styles.HeaderStyle.Foreground(styles.AccentPurple)
+	content.WriteString(headerStyle.Render("🏷️ Parameter Complexity Guide"))
+	content.WriteString("\n\n")
+
+	// Complexity explanations
+	legendItems := []struct {
+		icon  string
+		level string
+		desc  string
+	}{
+		{"🟢", "Basic", "Easy to use parameters that require minimal knowledge. Safe for beginners."},
+		{"🟡", "Intermediate", "Moderate complexity parameters that may require some understanding of networking or TLS concepts."},
+		{"🔵", "Advanced", "Complex parameters for experts. Requires deep knowledge of TLS, HTTP protocols, or fingerprinting techniques."},
+	}
+
+	for _, item := range legendItems {
+		// Level header
+		levelStyle := styles.SuccessStyle.Foreground(styles.AccentGreen)
+		content.WriteString(levelStyle.Render(fmt.Sprintf("%s %s", item.icon, item.level)))
+		content.WriteString("\n")
+
+		// Description
+		descStyle := styles.ContentStyle.MarginLeft(0).MarginBottom(2)
+		content.WriteString(descStyle.Render(item.desc))
+		content.WriteString("\n\n")
+	}
+
+	// Usage tip
+	tipStyle := styles.InfoStyle.Foreground(styles.TextMuted)
+	content.WriteString(tipStyle.Render("💡 Tip: Start with Basic (🟢) parameters, then progress to more advanced options as needed."))
 
 	return content.String()
 }
