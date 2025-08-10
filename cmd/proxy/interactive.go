@@ -85,6 +85,7 @@ func (m *InteractiveApp) Init() tea.Cmd {
 
 // Update handles messages and updates the model state
 func (m *InteractiveApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle WindowSizeMsg specially to update all models
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -114,10 +115,55 @@ func (m *InteractiveApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 		
 	case tea.KeyMsg:
-		return m.handleKeyPress(msg)
+		// Handle only global keys that affect mode switching
+		key := msg.String()
+		
+		// Global keys that work in any mode
+		switch key {
+		case "q", "ctrl+c":
+			if m.mode == ModeMenu {
+				m.quitting = true
+				return m, tea.Quit
+			} else {
+				m.mode = ModeMenu
+				return m, nil
+			}
+		case "esc":
+			if m.mode != ModeMenu {
+				m.mode = ModeMenu
+				return m, nil
+			}
+		}
+		
+		// Menu-specific keys (only when in menu mode)
+		if m.mode == ModeMenu {
+			switch key {
+			case "h", "?":
+				m.mode = ModeParamBrowser
+				return m, nil
+			case "p":
+				m.mode = ModeProfiles
+				return m, nil
+			case "s", "enter":
+				m.startServer = true
+				m.serverMode = true
+				return m, tea.Quit
+			case "c":
+				m.mode = ModeConfig
+				return m, nil
+			case "m":
+				m.mode = ModeMonitor
+				return m, nil
+			case "t":
+				m.mode = ModeTest
+				return m, nil
+			}
+			// If no menu key matched, fall through to delegation
+		}
+		// Fall through to delegate to active sub-model
 	}
 	
-	// Delegate to sub-models based on current mode
+	// Delegate ALL messages (including unhandled KeyMsg and MouseMsg) to sub-models based on current mode
 	switch m.mode {
 	case ModeParamBrowser:
 		var cmd tea.Cmd
@@ -138,74 +184,21 @@ func (m *InteractiveApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.monitorModel, cmd = m.monitorModel.Update(msg)
 		return m, cmd
-	}
-	
-	return m, nil
-}
-
-// handleKeyPress processes keyboard input
-func (m *InteractiveApp) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
-	
-	// Global key handlers
-	switch key {
-	case "q", "ctrl+c":
-		if m.mode == ModeMenu {
-			m.quitting = true
-			return m, tea.Quit
-		} else {
-			m.mode = ModeMenu
-			return m, nil
-		}
 		
-	case "esc":
-		if m.mode != ModeMenu {
-			m.mode = ModeMenu
-			return m, nil
-		}
-	}
-	
-	// Mode-specific key handlers
-	switch m.mode {
+	case ModeTest:
+		// Test mode doesn't have a model yet
+		return m, nil
+		
 	case ModeMenu:
-		return m.handleMenuKeys(key)
-	default:
-		// Let sub-models handle their own keys
-		return m, nil
-	}
-}
-
-// handleMenuKeys processes menu-specific keyboard input
-func (m *InteractiveApp) handleMenuKeys(key string) (tea.Model, tea.Cmd) {
-	switch key {
-	case "h", "?":
-		m.mode = ModeParamBrowser
-		return m, nil
-		
-	case "p":
-		m.mode = ModeProfiles
-		return m, nil
-		
-	case "s", "enter":
-		m.startServer = true
-		m.serverMode = true
-		return m, tea.Quit
-		
-	case "c":
-		m.mode = ModeConfig
-		return m, nil
-		
-	case "m":
-		m.mode = ModeMonitor
-		return m, nil
-		
-	case "t":
-		m.mode = ModeTest
+		// Menu mode doesn't need to forward messages
 		return m, nil
 	}
 	
 	return m, nil
 }
+
+// Note: handleKeyPress and handleMenuKeys have been integrated into Update method
+// to properly forward messages to sub-models
 
 // View renders the current view
 func (m *InteractiveApp) View() string {

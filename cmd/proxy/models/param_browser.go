@@ -3,7 +3,6 @@ package models
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"golang.design/x/clipboard"
 
 	"github.com/Danny-Dasilva/CycleTLS-Proxy/cmd/proxy/styles"
 )
@@ -45,13 +45,15 @@ func (p Parameter) Description() string {
 
 // ParamBrowserModel represents the split-pane parameter browser
 type ParamBrowserModel struct {
-	list     list.Model
-	viewport viewport.Model
-	width    int
-	height   int
-	focused  int // 0 = list, 1 = viewport
-	port     string
-	ready    bool
+	list       list.Model
+	viewport   viewport.Model
+	width      int
+	height     int
+	focused    int    // 0 = list, 1 = viewport
+	port       string
+	ready      bool
+	statusMsg  string // Status message for user feedback
+	statusTime int64  // Timestamp for status message expiry
 }
 
 // NewParamBrowserModel creates a new parameter browser model
@@ -203,6 +205,8 @@ func NewParamBrowserModel(port string) ParamBrowserModel {
 
 // Init initializes the parameter browser model
 func (m ParamBrowserModel) Init() tea.Cmd {
+	// Initialize clipboard
+	clipboard.Init()
 	return nil
 }
 
@@ -212,6 +216,23 @@ func (m ParamBrowserModel) Update(msg tea.Msg) (ParamBrowserModel, tea.Cmd) {
 
 	// Handle special cases first following Charmbracelet pattern
 	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		// Handle mouse events for list interaction
+		if m.ready && m.focused == 0 {
+			// Forward mouse events to list for click/hover functionality
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(msg)
+			cmds = append(cmds, cmd)
+			
+			// Update viewport content when mouse interaction changes selection
+			m.viewport.SetContent(m.getDetailContent())
+		} else if m.ready && m.focused == 1 {
+			// Forward mouse events to viewport for scrolling
+			var cmd tea.Cmd
+			m.viewport, cmd = m.viewport.Update(msg)
+			cmds = append(cmds, cmd)
+		}
+		
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -269,7 +290,7 @@ func (m ParamBrowserModel) Update(msg tea.Msg) (ParamBrowserModel, tea.Cmd) {
 			m.ready = true
 		}
 		
-		// Handle custom keys that should not be forwarded to components
+		// Handle non-navigation keys first that shouldn't be forwarded
 		switch msg.String() {
 		case "tab":
 			// Toggle focus between list and viewport
@@ -280,25 +301,19 @@ func (m ParamBrowserModel) Update(msg tea.Msg) (ParamBrowserModel, tea.Cmd) {
 			}
 			return m, nil
 		case "c":
-			// Copy current curl example to file for easy access
+			// Copy current curl example to clipboard
 			if m.ready {
-				m.exportCurrentExample()
+				if err := m.copyCurrentExample(); err == nil {
+					m.statusMsg = "📋 Copied curl example to clipboard"
+				} else {
+					m.statusMsg = fmt.Sprintf("❌ Failed to copy: %v", err)
+				}
+				m.statusTime = time.Now().Unix()
 			}
 			return m, nil
-		case "e":
-			// Export all examples to file
-			if m.ready {
-				m.exportAllExamples()
-			}
-			return m, nil
-		}
-		
-		// For enter key and navigation keys, we want to handle them AND forward them
-		if msg.String() == "enter" && m.ready {
-			m.viewport.SetContent(m.getDetailContent())
 		}
 
-		// Forward to focused component if ready
+		// Forward ALL other keys (including navigation) to focused component
 		if !m.ready {
 			return m, nil
 		}
@@ -309,8 +324,12 @@ func (m ParamBrowserModel) Update(msg tea.Msg) (ParamBrowserModel, tea.Cmd) {
 			m.list, cmd = m.list.Update(msg)
 			cmds = append(cmds, cmd)
 			
-			// Update viewport content when selection changes
-			if msg.String() == "up" || msg.String() == "down" || msg.String() == "j" || msg.String() == "k" || msg.String() == "enter" {
+			// Update viewport content when selection might have changed
+			// Check for any navigation or selection keys
+			key := msg.String()
+			if key == "up" || key == "down" || key == "j" || key == "k" || 
+			   key == "enter" || key == "pgup" || key == "pgdown" ||
+			   key == "home" || key == "end" {
 				m.viewport.SetContent(m.getDetailContent())
 			}
 		} else {
@@ -319,6 +338,12 @@ func (m ParamBrowserModel) Update(msg tea.Msg) (ParamBrowserModel, tea.Cmd) {
 			m.viewport, cmd = m.viewport.Update(msg)
 			cmds = append(cmds, cmd)
 		}
+	}
+
+	// Clear status message after 3 seconds
+	if m.statusMsg != "" && time.Now().Unix()-m.statusTime > 3 {
+		m.statusMsg = ""
+		m.statusTime = 0
 	}
 
 	return m, tea.Batch(cmds...)
@@ -373,6 +398,14 @@ func (m ParamBrowserModel) renderHeader() string {
 
 // renderFooter renders the browser footer
 func (m ParamBrowserModel) renderFooter() string {
+	// Show status message if present, otherwise show help
+	if m.statusMsg != "" {
+		statusStyle := styles.StatusBarStyle(m.width).
+			MarginTop(1).
+			Foreground(styles.AccentGreen)
+		return statusStyle.Render(m.statusMsg)
+	}
+	
 	var keys []string
 	
 	if m.focused == 0 {
@@ -390,7 +423,6 @@ func (m ParamBrowserModel) renderFooter() string {
 	}
 	
 	keys = append(keys, 
-		styles.KeyStyle("e")+"Export all",
 		styles.KeyStyle("esc")+"Back to menu",
 	)
 	
@@ -454,20 +486,20 @@ func (m ParamBrowserModel) getDetailContent() string {
 	// Curl example
 	if param.CurlExample != "" {
 		curlHeaderStyle := styles.SuccessStyle.Copy()
-		content.WriteString(curlHeaderStyle.Render("🚀 Complete curl Example:"))
+		content.WriteString(curlHeaderStyle.Render("🚀 Example Usage:"))
 		content.WriteString("\n")
 		
-		// Split long curl commands for better readability
-		curlLines := m.formatCurlCommand(param.CurlExample)
+		// Format curl command like in profile browser
 		curlStyle := styles.CodeStyle.Copy().
-			MarginLeft(0).
+			Background(lipgloss.Color("#2D3748")).
+			Padding(1).
+			MarginTop(1).
 			Width(m.viewport.Width - 4)
 		
-		for _, line := range curlLines {
-			content.WriteString(curlStyle.Render(line))
-			content.WriteString("\n")
-		}
-		content.WriteString("\n")
+		// Format with backslash continuation for readability
+		formattedCmd := m.formatCurlCommand(param.CurlExample)
+		content.WriteString(curlStyle.Render(formattedCmd))
+		content.WriteString("\n\n")
 	}
 	
 	// Usage notes based on parameter type
@@ -477,36 +509,24 @@ func (m ParamBrowserModel) getDetailContent() string {
 }
 
 // formatCurlCommand formats long curl commands for better display
-func (m ParamBrowserModel) formatCurlCommand(curlCmd string) []string {
-	maxWidth := m.viewport.Width - 8
-	if maxWidth < 40 {
-		maxWidth = 40
-	}
-	
-	if len(curlCmd) <= maxWidth {
-		return []string{curlCmd}
-	}
-	
+func (m ParamBrowserModel) formatCurlCommand(curlCmd string) string {
 	// Split on headers to make it more readable
 	parts := strings.Split(curlCmd, " -H ")
 	if len(parts) == 1 {
-		// No headers, just wrap normally
-		return []string{curlCmd}
+		// No headers, return as is
+		return curlCmd
 	}
 	
-	var lines []string
-	lines = append(lines, parts[0]+" \\")
+	// Format with backslash continuation
+	var result strings.Builder
+	result.WriteString(parts[0])
 	
 	for i := 1; i < len(parts); i++ {
-		if i == len(parts)-1 {
-			// Last part, no backslash
-			lines = append(lines, "  -H "+parts[i])
-		} else {
-			lines = append(lines, "  -H "+parts[i]+" \\")
-		}
+		result.WriteString(" \\\n     -H ")
+		result.WriteString(parts[i])
 	}
 	
-	return lines
+	return result.String()
 }
 
 // getUsageNotes provides parameter-specific usage guidance
@@ -535,83 +555,19 @@ func (m ParamBrowserModel) getUsageNotes(param Parameter) string {
 	return notes.String()
 }
 
-// exportCurrentExample saves the current parameter's curl example to a file
-func (m ParamBrowserModel) exportCurrentExample() {
+// copyCurrentExample copies the current parameter's curl example to clipboard
+func (m ParamBrowserModel) copyCurrentExample() error {
 	selectedItem := m.list.SelectedItem()
 	if selectedItem == nil {
-		return
+		return fmt.Errorf("no item selected")
 	}
 
 	param, ok := selectedItem.(Parameter)
 	if !ok {
-		return
+		return fmt.Errorf("invalid item type")
 	}
 
-	filename := fmt.Sprintf("curl_example_%s.sh", strings.ToLower(strings.ReplaceAll(param.Name, "-", "_")))
-	content := fmt.Sprintf("#!/bin/bash\n# %s - %s\n# Generated at %s\n\n%s\n", 
-		param.Name, param.Desc, time.Now().Format("2006-01-02 15:04:05"), param.CurlExample)
-	
-	if err := os.WriteFile(filename, []byte(content), 0755); err == nil {
-		// File written successfully - this would show in logs
-	}
-}
-
-// exportAllExamples saves all parameter examples to a comprehensive script
-func (m ParamBrowserModel) exportAllExamples() {
-	var content strings.Builder
-	content.WriteString("#!/bin/bash\n")
-	content.WriteString("# CycleTLS-Proxy - All Parameter Examples\n")
-	content.WriteString(fmt.Sprintf("# Generated at %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
-	content.WriteString(fmt.Sprintf("PROXY_URL=\"http://localhost:%s\"\n\n", m.port))
-	
-	// Group by category
-	categories := map[string][]Parameter{
-		"Required": {},
-		"Basic": {},
-		"Advanced TLS": {},
-		"Connection": {},
-	}
-	
-	// Extract all parameters from the list - we'll manually iterate through the known parameters
-	// This is more reliable than trying to extract from the list model
-	allParams := []Parameter{
-		{Name: "X-URL", Desc: "Target URL to proxy the request to", Category: "Required"},
-		{Name: "X-IDENTIFIER", Desc: "Browser profile for TLS fingerprinting", Category: "Basic"},
-		{Name: "X-SESSION-ID", Desc: "Session identifier for connection reuse", Category: "Basic"},
-		{Name: "X-TIMEOUT", Desc: "Custom timeout in seconds (1-300)", Category: "Basic"},
-		{Name: "X-PROXY", Desc: "Upstream proxy server configuration", Category: "Basic"},
-		{Name: "X-JA3", Desc: "Custom JA3 TLS fingerprint string", Category: "Advanced TLS"},
-		{Name: "X-JA4", Desc: "JA4 enhanced TLS fingerprinting token", Category: "Advanced TLS"},
-		{Name: "X-HTTP2-FINGERPRINT", Desc: "HTTP/2 specific fingerprint", Category: "Advanced TLS"},
-		{Name: "X-USER-AGENT", Desc: "Custom user agent string override", Category: "Advanced TLS"},
-		{Name: "X-HEADER-ORDER", Desc: "Custom header ordering", Category: "Connection"},
-		{Name: "X-INSECURE", Desc: "Skip TLS certificate verification", Category: "Connection"},
-		{Name: "X-FORCE-HTTP1", Desc: "Force HTTP/1.1 protocol usage", Category: "Connection"},
-		{Name: "X-FORCE-HTTP3", Desc: "Force HTTP/3/QUIC protocol usage", Category: "Connection"},
-		{Name: "X-ENABLE-CONNECTION-REUSE", Desc: "Enable TCP connection reuse", Category: "Connection"},
-	}
-	
-	for _, param := range allParams {
-		categories[param.Category] = append(categories[param.Category], param)
-	}
-	
-	// Write examples grouped by category
-	for category, params := range categories {
-		if len(params) > 0 {
-			content.WriteString(fmt.Sprintf("# %s Parameters\n", category))
-			content.WriteString(strings.Repeat("=", len(category)+12) + "\n\n")
-			
-			for _, param := range params {
-				content.WriteString(fmt.Sprintf("# %s - %s\n", param.Name, param.Desc))
-				content.WriteString(fmt.Sprintf("echo \"Testing %s\"\n", param.Name))
-				content.WriteString(param.CurlExample + "\n")
-				content.WriteString("echo \"\"\n\n")
-			}
-		}
-	}
-	
-	filename := "cycletls_proxy_examples.sh"
-	if err := os.WriteFile(filename, []byte(content.String()), 0755); err == nil {
-		// File written successfully
-	}
+	// Copy the curl example to clipboard
+	clipboard.Write(clipboard.FmtText, []byte(param.CurlExample))
+	return nil
 }

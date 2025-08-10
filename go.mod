@@ -39,8 +39,12 @@ require (
 	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
+	golang.design/x/clipboard v0.7.1 // indirect
 	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
+	golang.org/x/exp/shiny v0.0.0-20250808145144-a408d31f581a // indirect
+	golang.org/x/image v0.30.0 // indirect
+	golang.org/x/mobile v0.0.0-20250808145247-395d808d53cd // indirect
 	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect

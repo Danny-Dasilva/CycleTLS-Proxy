@@ -136,7 +136,9 @@ func (m ConfigModel) View() string {
 	headerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#61DAFB")).
 		Bold(true).
-		Padding(0, 1)
+		Padding(0, 1).
+		Width(m.width).
+		Align(lipgloss.Center)
 	
 	header := headerStyle.Render("⚙️ Configuration Settings")
 	content.WriteString(header)
@@ -150,72 +152,132 @@ func (m ConfigModel) View() string {
 		{"MAX_SESSIONS", "Max Sessions", "Maximum number of concurrent sessions", "100", validateNumber},
 	}
 	
-	for i, field := range fields {
-		// Field label
-		labelStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF6B9D")).
-			Bold(true)
+	// Responsive layout
+	if m.width < 80 {
+		// Compact vertical layout for small terminals
+		for i, field := range fields {
+			// Field label and description on same line
+			labelDescStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FF6B9D")).
+				Bold(true)
+			
+			labelDesc := fmt.Sprintf("%s: %s", field.Label, field.Description)
+			content.WriteString(labelDescStyle.Render(labelDesc))
+			content.WriteString("\n")
+			
+			// Input field (smaller)
+			inputStyle := lipgloss.NewStyle().
+				BorderStyle(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#61DAFB")).
+				Padding(0, 1).
+				MarginBottom(1).
+				Width(min(m.width-4, 40))
+			
+			if i == m.focused {
+				inputStyle = inputStyle.BorderForeground(lipgloss.Color("#FF6B9D"))
+			}
+			
+			content.WriteString(inputStyle.Render(m.inputs[i].View()))
+			content.WriteString("\n")
+		}
+	} else {
+		// Original layout for larger terminals
+		for i, field := range fields {
+			// Field label
+			labelStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FF6B9D")).
+				Bold(true)
+			
+			content.WriteString(labelStyle.Render(field.Label))
+			content.WriteString("\n")
+			
+			// Field description
+			descStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#6C7B7F")).
+				Italic(true)
+			
+			content.WriteString(descStyle.Render(field.Description))
+			content.WriteString("\n")
+			
+			// Input field
+			inputStyle := lipgloss.NewStyle().
+				BorderStyle(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#61DAFB")).
+				Padding(0, 1).
+				MarginTop(1).
+				MarginBottom(2)
+			
+			if i == m.focused {
+				inputStyle = inputStyle.BorderForeground(lipgloss.Color("#FF6B9D"))
+			}
+			
+			content.WriteString(inputStyle.Render(m.inputs[i].View()))
+			content.WriteString("\n")
+		}
+	}
+	
+	// Current settings display (compact for small terminals)
+	if m.width < 80 {
+		// Show settings inline
+		settingsStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#98D8C8")).
+			Bold(true).
+			MarginTop(1)
 		
-		content.WriteString(labelStyle.Render(field.Label))
+		content.WriteString(settingsStyle.Render("Settings:"))
+		
+		settingValueStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFFFFF"))
+		
+		for key, value := range m.settings {
+			content.WriteString(fmt.Sprintf(" %s=%s", 
+				lipgloss.NewStyle().Foreground(lipgloss.Color("#61DAFB")).Render(key),
+				settingValueStyle.Render(value)))
+		}
 		content.WriteString("\n")
-		
-		// Field description
-		descStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6C7B7F")).
-			Italic(true)
-		
-		content.WriteString(descStyle.Render(field.Description))
-		content.WriteString("\n")
-		
-		// Input field
-		inputStyle := lipgloss.NewStyle().
+	} else {
+		// Full settings display for larger terminals
+		settingsStyle := lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#61DAFB")).
-			Padding(0, 1).
-			MarginTop(1).
-			MarginBottom(2)
+			BorderForeground(lipgloss.Color("#98D8C8")).
+			Padding(1, 2).
+			MarginTop(2)
 		
-		if i == m.focused {
-			inputStyle = inputStyle.BorderForeground(lipgloss.Color("#FF6B9D"))
+		settingsContent := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#98D8C8")).
+			Bold(true).
+			Render("Current Settings:")
+		
+		settingsContent += "\n\n"
+		
+		for key, value := range m.settings {
+			settingsContent += fmt.Sprintf("%s = %s\n", 
+				lipgloss.NewStyle().Foreground(lipgloss.Color("#61DAFB")).Render(key),
+				lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Render(value))
 		}
 		
-		content.WriteString(inputStyle.Render(m.inputs[i].View()))
-		content.WriteString("\n")
+		content.WriteString(settingsStyle.Render(settingsContent))
 	}
-	
-	// Current settings display
-	settingsStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#98D8C8")).
-		Padding(1, 2).
-		MarginTop(2)
-	
-	settingsContent := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#98D8C8")).
-		Bold(true).
-		Render("Current Settings:")
-	
-	settingsContent += "\n\n"
-	
-	for key, value := range m.settings {
-		settingsContent += fmt.Sprintf("%s = %s\n", 
-			lipgloss.NewStyle().Foreground(lipgloss.Color("#61DAFB")).Render(key),
-			lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Render(value))
-	}
-	
-	content.WriteString(settingsStyle.Render(settingsContent))
 	
 	// Instructions
 	instructionStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6C7B7F")).
 		Align(lipgloss.Center).
-		MarginTop(2)
+		Width(m.width).
+		MarginTop(1)
 	
 	instructions := "TAB/↑↓ to navigate • ENTER to save • ESC to return"
-	content.WriteString("\n")
 	content.WriteString(instructionStyle.Render(instructions))
 	
 	return content.String()
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // nextInput moves focus to the next input field

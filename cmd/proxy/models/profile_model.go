@@ -90,6 +90,12 @@ func (m ProfileModel) Init() tea.Cmd {
 func (m ProfileModel) Update(msg tea.Msg) (ProfileModel, tea.Cmd) {
 	// Handle special cases first following Charmbracelet pattern
 	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		// Forward mouse events to list for click/hover functionality
+		var cmd tea.Cmd
+		m.list, cmd = m.list.Update(msg)
+		return m, cmd
+		
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
