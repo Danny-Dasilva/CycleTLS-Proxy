@@ -429,7 +429,7 @@ docker service scale cycletls-proxy=5
 ## Monitoring & Observability
 
 <div align="center">
-  <img src="assets/images/monitor.png" alt="Live Monitoring Dashboard" width="700" style="border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/>
+  <img src="assets/images/monitor.png" alt="Live Monitoring Dashboard" width="800" style="border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/>
 </div>
 
 ### Health Checks
