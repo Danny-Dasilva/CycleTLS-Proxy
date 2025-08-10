@@ -10,7 +10,10 @@
   <img src="assets/images/landing.png" alt="CycleTLS Proxy Interface" width="800" style="border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/>
 </div>
 <p align="center"> <strong>Advanced TLS Fingerprint Proxy Server </strong>  </p>
-  <p align="center">A high-performance HTTP proxy that enables TLS fingerprint spoofing to mimic various browsers and clients. Built on top of [CycleTLS](https://github.com/Danny-Dasilva/CycleTLS), this proxy allows you to make HTTP requests while appearing as different browsers with authentic TLS signatures.</p>
+
+<p align="center">
+A high-performance HTTP proxy that enables TLS fingerprint spoofing to mimic various browsers and clients. Built on top of <a href="https://github.com/Danny-Dasilva/CycleTLS">CycleTLS</a>, this proxy allows you to make HTTP requests while appearing as different browsers with authentic TLS signatures.
+</p>
 
 ## Features
 
