@@ -104,11 +104,11 @@ jobs:
           # Set binary name
           BINARY_NAME="cycletls-proxy${{ matrix.ext }}"
           
-          # Build flags for optimization
-          BUILD_FLAGS="-ldflags=-w -s -X main.version=${{ steps.version.outputs.version }} -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.gitCommit=${GITHUB_SHA::8}"
+          # Set build time
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           
           # Build the binary
-          go build ${BUILD_FLAGS} -o dist/${BINARY_NAME} ./cmd/proxy
+          go build -ldflags "-w -s -X main.version=${{ steps.version.outputs.version }} -X main.buildTime=$BUILD_TIME -X main.gitCommit=${GITHUB_SHA::8}" -o dist/${BINARY_NAME} ./cmd/proxy
           
           # Verify binary was created
           ls -la dist/

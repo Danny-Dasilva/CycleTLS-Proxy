@@ -2,6 +2,7 @@
 package models
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -23,32 +24,42 @@ type HelpSection struct {
 }
 
 // NewHelpModel creates a new help model with documentation content
-func NewHelpModel() HelpModel {
+func NewHelpModel(port string) HelpModel {
 	sections := []HelpSection{
 		{
 			Title: "🚀 Quick Start",
-			Content: `CycleTLS-Proxy is an HTTP proxy server that provides TLS fingerprinting capabilities.
+			Content: fmt.Sprintf(`CycleTLS-Proxy is an HTTP proxy server that provides TLS fingerprinting capabilities.
 It accepts HTTP requests with special headers to control TLS behavior and proxies 
 them with specified browser fingerprints.
 
 Basic Usage:
-curl -H "X-URL: https://httpbin.org/ip" -H "X-IDENTIFIER: chrome" http://localhost:8080`,
+curl -H "X-URL: https://httpbin.org/ip" -H "X-IDENTIFIER: chrome" http://localhost:%s`, port),
 		},
 		{
 			Title: "📋 Required Headers",
-			Content: `X-URL: Target URL to proxy the request to (required)
-  Example: X-URL: https://api.example.com/data
-  
-X-IDENTIFIER: Browser profile to use for TLS fingerprinting
-  Available: chrome, firefox, safari, edge, okhttp, etc.
+			Content: fmt.Sprintf(`X-URL: Target URL to proxy the request to (REQUIRED)
+  Example: curl -H "X-URL: https://api.example.com/data" http://localhost:%s
+  What it does: Specifies the destination URL for the proxy request
+
+X-IDENTIFIER: Browser profile to use for TLS fingerprinting (OPTIONAL)
+  Available: chrome, firefox, safari_ios, safari, edge, okhttp, chrome_windows, firefox_windows, chrome_legacy_tls12
   Default: chrome (if not specified)
-  
-X-SESSION-ID: Session identifier for connection reuse (optional)
-  Example: X-SESSION-ID: my-session-123
-  
-X-PROXY: Upstream proxy to use (optional)
+  Example: curl -H "X-URL: https://httpbin.org/ip" -H "X-IDENTIFIER: firefox" http://localhost:%s
+  What it does: Changes the TLS fingerprint to match the specified browser
+
+X-SESSION-ID: Session identifier for connection reuse (OPTIONAL)
+  Example: curl -H "X-URL: https://api.example.com" -H "X-SESSION-ID: my-session-123" http://localhost:%s
+  What it does: Reuses TCP connections and maintains cookies across requests
+
+X-PROXY: Upstream proxy to use (OPTIONAL)
   Format: http://username:password@host:port
-  Example: X-PROXY: http://user:pass@proxy.example.com:8080`,
+  Example: curl -H "X-URL: https://httpbin.org/ip" -H "X-PROXY: http://user:pass@proxy.example.com:8080" http://localhost:%s
+  What it does: Routes the request through an upstream proxy server
+
+X-TIMEOUT: Custom timeout in seconds (OPTIONAL)
+  Range: 1-300 seconds, Default: 30
+  Example: curl -H "X-URL: https://httpbin.org/delay/10" -H "X-TIMEOUT: 15" http://localhost:%s
+  What it does: Sets a custom timeout for slow requests`, port, port, port, port, port),
 		},
 		{
 			Title: "🌐 Browser Profiles",
@@ -272,7 +283,8 @@ func (m HelpModel) Update(msg tea.Msg) (HelpModel, tea.Cmd) {
 // View renders the help model
 func (m HelpModel) View() string {
 	if !m.ready {
-		return "\n  Initializing help system..."
+		// Initialize with default content if not ready
+		return m.generateContent()
 	}
 	
 	headerStyle := lipgloss.NewStyle().

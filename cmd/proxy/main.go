@@ -66,31 +66,16 @@ func main() {
 
 	if serverOnly {
 		// Direct server mode (legacy behavior)
-		startServer(port, logger)
+		startServerOnly(port, logger)
 		return
 	}
 
-	// Run interactive application
-	app := NewInteractiveApp(port, logger)
-	
-	program := tea.NewProgram(app, tea.WithAltScreen())
-	
-	model, err := program.Run()
-	if err != nil {
-		fmt.Printf("Error running interactive app: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Check if user wants to start the server
-	if finalApp, ok := model.(*InteractiveApp); ok {
-		if finalApp.ShouldStartServer() {
-			startServer(port, logger)
-		}
-	}
+	// Start server in background and run interactive application
+	startServerWithInteractiveUI(port, logger)
 }
 
-// startServer starts the proxy server
-func startServer(port string, logger *log.Logger) {
+// startServerOnly starts the proxy server without interactive UI (legacy mode)
+func startServerOnly(port string, logger *log.Logger) {
 	// Display startup banner
 	displayStartupBanner(port, logger)
 
@@ -109,7 +94,7 @@ func startServer(port string, logger *log.Logger) {
 	}
 
 	// Setup graceful shutdown
-	setupGracefulShutdown(server, handler, logger)
+	setupGracefulShutdownWithUI(server, handler, logger)
 
 	// Display ready message
 	displayReadyMessage(port, handler.GetAvailableProfiles())
@@ -119,6 +104,49 @@ func startServer(port string, logger *log.Logger) {
 	if err := server.ListenAndServe(":" + port); err != nil {
 		logger.Fatal("Server failed to start", "error", err)
 	}
+}
+
+// startServerWithInteractiveUI starts the server in background and runs interactive UI
+func startServerWithInteractiveUI(port string, logger *log.Logger) {
+	// Initialize proxy handler
+	handler := proxy.NewHandler(logger)
+	
+	// Create server
+	server := &fasthttp.Server{
+		Handler:                       handler.HandleRequest,
+		DisablePreParseMultipartForm: true,
+		StreamRequestBody:            true,
+		ReadTimeout:                  30 * time.Second,
+		WriteTimeout:                 30 * time.Second,
+		IdleTimeout:                  60 * time.Second,
+	}
+
+	// Start server in background
+	go func() {
+		logger.Info("Starting proxy server", "port", port)
+		if err := server.ListenAndServe(":" + port); err != nil {
+			logger.Error("Server failed to start", "error", err)
+		}
+	}()
+
+	// Give server time to start
+	time.Sleep(100 * time.Millisecond)
+
+	// Setup graceful shutdown for both server and UI
+	setupGracefulShutdownWithUI(server, handler, logger)
+
+	// Run interactive application
+	app := NewInteractiveApp(port, logger, handler)
+	
+	program := tea.NewProgram(app, tea.WithAltScreen())
+	
+	_, err := program.Run()
+	if err != nil {
+		logger.Error("Interactive app error", "error", err)
+	}
+
+	// Cleanup
+	handler.Close()
 }
 
 func displayStartupBanner(port string, logger *log.Logger) {
@@ -208,18 +236,13 @@ func displayReadyMessage(port string, profiles []string) {
 	fmt.Printf("%s\n%s %s\n%s\n\n", ready, "🌐", url, profileList)
 }
 
-func setupGracefulShutdown(server *fasthttp.Server, handler *proxy.Handler, logger *log.Logger) {
+func setupGracefulShutdownWithUI(server *fasthttp.Server, handler *proxy.Handler, logger *log.Logger) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
 		<-c
-		shutdownStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFB86C")).
-			Bold(true)
-
-		fmt.Println("\n" + shutdownStyle.Render("🛑 Graceful shutdown initiated..."))
-		logger.Info("Shutting down server")
+		logger.Info("Shutting down server and UI")
 
 		// Close proxy handler (closes all sessions)
 		handler.Close()

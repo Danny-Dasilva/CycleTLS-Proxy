@@ -1,7 +1,7 @@
 package proxy
 
 import (
-	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +12,7 @@ import (
 )
 
 func TestNewHandler(t *testing.T) {
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 
 	if handler == nil {
@@ -23,8 +23,8 @@ func TestNewHandler(t *testing.T) {
 		t.Error("Handler logger is nil")
 	}
 
-	if handler.clientManager == nil {
-		t.Error("Handler clientManager is nil")
+	if handler.clients == nil {
+		t.Error("Handler clients map is nil")
 	}
 
 	if handler.profiles == nil {
@@ -37,7 +37,7 @@ func TestNewHandler(t *testing.T) {
 }
 
 func TestExtractHeaders(t *testing.T) {
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 
 	tests := []struct {
@@ -162,7 +162,7 @@ func TestExtractHeaders(t *testing.T) {
 }
 
 func TestValidateURL(t *testing.T) {
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 
 	tests := []struct {
@@ -232,7 +232,7 @@ func TestValidateURL(t *testing.T) {
 }
 
 func TestGetProfile(t *testing.T) {
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 
 	// Test getting a valid profile
@@ -252,7 +252,7 @@ func TestGetProfile(t *testing.T) {
 }
 
 func TestGetAvailableProfiles(t *testing.T) {
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 
 	profiles := handler.GetAvailableProfiles()
@@ -268,7 +268,7 @@ func TestGetAvailableProfiles(t *testing.T) {
 }
 
 func TestSetDefaultTimeout(t *testing.T) {
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 
 	newTimeout := 45 * time.Second
@@ -280,7 +280,7 @@ func TestSetDefaultTimeout(t *testing.T) {
 }
 
 func TestSendError(t *testing.T) {
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 
 	ctx := &fasthttp.RequestCtx{}
@@ -297,7 +297,7 @@ func TestSendError(t *testing.T) {
 }
 
 func TestHandleHealthCheck(t *testing.T) {
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 
 	ctx := &fasthttp.RequestCtx{}
@@ -327,7 +327,7 @@ func TestHandleHealthCheck(t *testing.T) {
 
 // Benchmark tests for performance analysis
 func BenchmarkExtractHeaders(b *testing.B) {
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Request.Header.Set("X-URL", "https://example.com")
@@ -344,7 +344,7 @@ func BenchmarkExtractHeaders(b *testing.B) {
 }
 
 func BenchmarkValidateURL(b *testing.B) {
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 	url := "https://example.com/api/v1/test?param=value"
 
@@ -358,7 +358,7 @@ func BenchmarkValidateURL(b *testing.B) {
 }
 
 func BenchmarkGetProfile(b *testing.B) {
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 
 	b.ResetTimer()
@@ -395,7 +395,7 @@ func TestHandleRequest_Integration(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	logger := log.New()
+	logger := log.New(io.Discard)
 	handler := NewHandler(logger)
 
 	ctx := createTestContext("GET", "", map[string]string{

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Danny-Dasilva/CycleTLS-Proxy/cmd/proxy/models"
 	"github.com/Danny-Dasilva/CycleTLS-Proxy/internal/fingerprints"
+	"github.com/Danny-Dasilva/CycleTLS-Proxy/internal/proxy"
 )
 
 // AppMode represents the different modes of the application
@@ -48,20 +49,27 @@ type InteractiveApp struct {
 }
 
 // NewInteractiveApp creates a new interactive application
-func NewInteractiveApp(port string, logger *log.Logger) *InteractiveApp {
+func NewInteractiveApp(port string, logger *log.Logger, handler ...*proxy.Handler) *InteractiveApp {
 	profiles := fingerprints.GetDefaultProfiles()
 	
-	return &InteractiveApp{
+	app := &InteractiveApp{
 		mode:     ModeMenu,
 		logger:   logger,
 		port:     port,
 		profiles: profiles,
 		
-		helpModel:    models.NewHelpModel(),
+		helpModel:    models.NewHelpModel(port),
 		profileModel: models.NewProfileModel(profiles),
 		configModel:  models.NewConfigModel(),
 		monitorModel: models.NewMonitorModel(),
 	}
+	
+	// If handler is provided, we're in server mode
+	if len(handler) > 0 && handler[0] != nil {
+		app.serverMode = true
+	}
+	
+	return app
 }
 
 // Init initializes the Bubble Tea application
@@ -212,14 +220,25 @@ func (m *InteractiveApp) renderMenu() string {
 	
 	title := titleStyle.Render(m.getASCIIBanner())
 	
-	// Subtitle
+	// Subtitle with server status
 	subtitleStyle := lipgloss.NewStyle().
 		Foreground(secondaryColor).
 		Align(lipgloss.Center).
 		Width(m.width).
 		MarginBottom(2)
 	
-	subtitle := subtitleStyle.Render("Advanced TLS Fingerprint Proxy Server")
+	var subtitle string
+	if m.serverMode {
+		statusStyle := lipgloss.NewStyle().Foreground(successColor).Bold(true)
+		subtitle = subtitleStyle.Render("Advanced TLS Fingerprint Proxy Server") + "\n" +
+			lipgloss.NewStyle().
+				Foreground(successColor).
+				Align(lipgloss.Center).
+				Width(m.width).
+				Render(statusStyle.Render("🟢 SERVER RUNNING") + " • Ready to accept requests")
+	} else {
+		subtitle = subtitleStyle.Render("Advanced TLS Fingerprint Proxy Server")
+	}
 	
 	// Example command
 	exampleStyle := lipgloss.NewStyle().
@@ -274,21 +293,39 @@ func (m *InteractiveApp) renderMenu() string {
 		Padding(0, 1).
 		MarginRight(1)
 	
-	menuItems := []string{
-		fmt.Sprintf("%s %s Start the proxy server", 
-			keyStyle.Render(" s "), "🚀"),
-		fmt.Sprintf("%s %s View interactive help & documentation", 
-			keyStyle.Render(" h "), "📚"),
-		fmt.Sprintf("%s %s Browse browser profiles (%d available)", 
-			keyStyle.Render(" p "), "🌐", len(m.profiles)),
-		fmt.Sprintf("%s %s Configure settings", 
-			keyStyle.Render(" c "), "⚙️"),
-		fmt.Sprintf("%s %s Test requests", 
-			keyStyle.Render(" t "), "🧪"),
-		fmt.Sprintf("%s %s Monitor (when server is running)", 
-			inactiveKeyStyle.Render(" m "), "📊"),
-		fmt.Sprintf("%s %s Quit application", 
-			keyStyle.Render(" q "), "👋"),
+	var menuItems []string
+	if m.serverMode {
+		menuItems = []string{
+			fmt.Sprintf("%s %s View interactive help & documentation", 
+				keyStyle.Render(" h "), "📚"),
+			fmt.Sprintf("%s %s Browse browser profiles (%d available)", 
+				keyStyle.Render(" p "), "🌐", len(m.profiles)),
+			fmt.Sprintf("%s %s Configure settings", 
+				keyStyle.Render(" c "), "⚙️"),
+			fmt.Sprintf("%s %s Test requests with the running server", 
+				keyStyle.Render(" t "), "🧪"),
+			fmt.Sprintf("%s %s Live monitoring dashboard", 
+				keyStyle.Render(" m "), "📊"),
+			fmt.Sprintf("%s %s Quit application (stops server)", 
+				keyStyle.Render(" q "), "👋"),
+		}
+	} else {
+		menuItems = []string{
+			fmt.Sprintf("%s %s Start the proxy server", 
+				keyStyle.Render(" s "), "🚀"),
+			fmt.Sprintf("%s %s View interactive help & documentation", 
+				keyStyle.Render(" h "), "📚"),
+			fmt.Sprintf("%s %s Browse browser profiles (%d available)", 
+				keyStyle.Render(" p "), "🌐", len(m.profiles)),
+			fmt.Sprintf("%s %s Configure settings", 
+				keyStyle.Render(" c "), "⚙️"),
+			fmt.Sprintf("%s %s Test requests", 
+				inactiveKeyStyle.Render(" t "), "🧪"),
+			fmt.Sprintf("%s %s Monitor (requires running server)", 
+				inactiveKeyStyle.Render(" m "), "📊"),
+			fmt.Sprintf("%s %s Quit application", 
+				keyStyle.Render(" q "), "👋"),
+		}
 	}
 	
 	menu := menuStyle.Render(strings.Join(menuItems, "\n"))

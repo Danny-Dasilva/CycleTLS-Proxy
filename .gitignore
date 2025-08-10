@@ -1,0 +1,91 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+coverage.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+bin/
+*.tar.gz
+*.zip
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker
+.docker/
+
+# Local development files
+cycletls-proxy
+cycletls-proxy.exe
+
+# Test coverage reports
+coverage.xml
+coverage.json
+
+# Profiling files
+*.prof
+*.pprof
+
+# Local configuration
+config.local.yaml
+config.local.yml
+config.local.json
+
+# Development database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Local certificate files (if any)
+*.pem
+*.crt
+*.key
+*.p12
+*.pfx
+
+# CycleTLS specific
+CycleTLS/

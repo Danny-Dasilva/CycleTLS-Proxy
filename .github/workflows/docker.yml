@@ -80,7 +80,7 @@ jobs:
             type=ref,event=pr
             type=match,pattern=v(.*),group=1
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=develop,enable={{is_branch}} && {{branch}} == 'develop'
+            type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
             type=sha,prefix={{branch}}-,enable=true
           labels: |
             org.opencontainers.image.title=CycleTLS-Proxy
