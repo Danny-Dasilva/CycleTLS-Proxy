@@ -108,8 +108,12 @@ func startServerOnly(port string, logger *log.Logger) {
 
 // startServerWithInteractiveUI starts the server in background and runs interactive UI
 func startServerWithInteractiveUI(port string, logger *log.Logger) {
-	// Initialize proxy handler
-	handler := proxy.NewHandler(logger)
+	// Create channels for real-time logging and monitoring
+	logChannel := make(chan proxy.RequestLogEntry, 100)    // Buffer up to 100 log entries
+	monitorChannel := make(chan proxy.MonitorEvent, 200)   // Buffer up to 200 monitor events
+	
+	// Initialize proxy handler with both channels
+	handler := proxy.NewHandlerWithChannels(logger, logChannel, monitorChannel)
 	
 	// Create server
 	server := &fasthttp.Server{
@@ -136,7 +140,7 @@ func startServerWithInteractiveUI(port string, logger *log.Logger) {
 	setupGracefulShutdownWithUI(server, handler, logger)
 
 	// Run interactive application
-	app := NewInteractiveApp(port, logger, handler)
+	app := NewInteractiveApp(port, logger, logChannel, monitorChannel, handler)
 	
 	program := tea.NewProgram(app, tea.WithAltScreen())
 	

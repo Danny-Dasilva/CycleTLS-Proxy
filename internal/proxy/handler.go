@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Danny-Dasilva/CycleTLS/cycletls"
@@ -16,6 +17,81 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/valyala/fasthttp"
 )
+
+// RequestLogEntry represents a request log entry for real-time logging
+type RequestLogEntry struct {
+	Timestamp   time.Time
+	Method      string
+	URL         string
+	Profile     string
+	Status      int
+	Duration    time.Duration
+	SessionID   string
+	RemoteAddr  string
+}
+
+// ServerMetrics contains real-time server metrics
+type ServerMetrics struct {
+	// Atomic counters for thread-safe access
+	TotalRequests    int64
+	SuccessfulReqs   int64
+	FailedRequests   int64
+	TotalBytes       int64
+
+	// Protected by mutex
+	mu               sync.RWMutex
+	StartTime        time.Time
+	LastRequestTime  time.Time
+	RequestTimes     []time.Duration // Ring buffer for response times
+	RequestsPerSecond float64
+	ErrorRate        float64
+	AverageResponse  time.Duration
+	
+	// Ring buffer management
+	maxResponseTimes int
+	responseIndex    int
+}
+
+// MonitorEvent represents different types of monitoring events
+type MonitorEvent struct {
+	Type      string      `json:"type"`
+	Timestamp time.Time   `json:"timestamp"`
+	Data      interface{} `json:"data"`
+}
+
+// RequestEventData contains request-specific event data
+type RequestEventData struct {
+	Method     string        `json:"method"`
+	URL        string        `json:"url"`
+	Profile    string        `json:"profile"`
+	Status     int           `json:"status"`
+	Duration   time.Duration `json:"duration"`
+	SessionID  string        `json:"session_id"`
+	RemoteAddr string        `json:"remote_addr"`
+}
+
+// MetricsEventData contains metrics update event data
+type MetricsEventData struct {
+	TotalRequests     int64         `json:"total_requests"`
+	SuccessfulReqs    int64         `json:"successful_requests"`
+	FailedRequests    int64         `json:"failed_requests"`
+	ActiveSessions    int           `json:"active_sessions"`
+	Uptime            time.Duration `json:"uptime"`
+	RequestsPerSecond float64       `json:"requests_per_second"`
+	ErrorRate         float64       `json:"error_rate"`
+	AverageResponse   time.Duration `json:"average_response_time"`
+	TotalBytes        int64         `json:"total_bytes"`
+}
+
+// newServerMetrics creates a new ServerMetrics instance
+func newServerMetrics() *ServerMetrics {
+	return &ServerMetrics{
+		StartTime:        time.Now(),
+		LastRequestTime:  time.Now(),
+		RequestTimes:     make([]time.Duration, 100), // Keep last 100 response times
+		maxResponseTimes: 100,
+	}
+}
 
 // Handler handles incoming proxy requests with TLS fingerprint spoofing.
 // It manages session state, validates headers, and forwards requests while
@@ -26,6 +102,9 @@ type Handler struct {
 	logger         *log.Logger
 	mu             sync.RWMutex // protects concurrent access
 	defaultTimeout time.Duration
+	logChannel     chan RequestLogEntry // optional channel for real-time logging
+	monitorChannel chan MonitorEvent     // optional channel for monitoring events
+	metrics        *ServerMetrics        // real-time metrics tracking
 }
 
 // NewHandler creates a new proxy handler with default configuration.
@@ -36,6 +115,32 @@ func NewHandler(logger *log.Logger) *Handler {
 		clients:        make(map[string]*cycletls.CycleTLS),
 		logger:         logger,
 		defaultTimeout: 30 * time.Second,
+		metrics:        newServerMetrics(),
+	}
+}
+
+// NewHandlerWithLogChannel creates a new proxy handler with real-time logging.
+func NewHandlerWithLogChannel(logger *log.Logger, logChannel chan RequestLogEntry) *Handler {
+	return &Handler{
+		profiles:       fingerprints.GetDefaultProfiles(),
+		clients:        make(map[string]*cycletls.CycleTLS),
+		logger:         logger,
+		defaultTimeout: 30 * time.Second,
+		logChannel:     logChannel,
+		metrics:        newServerMetrics(),
+	}
+}
+
+// NewHandlerWithChannels creates a new proxy handler with both logging and monitoring channels.
+func NewHandlerWithChannels(logger *log.Logger, logChannel chan RequestLogEntry, monitorChannel chan MonitorEvent) *Handler {
+	return &Handler{
+		profiles:       fingerprints.GetDefaultProfiles(),
+		clients:        make(map[string]*cycletls.CycleTLS),
+		logger:         logger,
+		defaultTimeout: 30 * time.Second,
+		logChannel:     logChannel,
+		monitorChannel: monitorChannel,
+		metrics:        newServerMetrics(),
 	}
 }
 
@@ -118,11 +223,39 @@ func (h *Handler) HandleRequest(ctx *fasthttp.RequestCtx) {
 			"target_url", headers.TargetURL,
 			"method", string(ctx.Method()),
 			"session_id", headers.SessionID)
+		
+		// Track failed request metrics
+		duration := time.Since(start)
+		h.updateMetrics(fasthttp.StatusBadGateway, duration, 0)
+		h.sendRequestLog(ctx, headers, fasthttp.StatusBadGateway, duration)
+		h.sendMonitorEvent("request_error", RequestEventData{
+			Method:     string(ctx.Method()),
+			URL:        headers.TargetURL,
+			Profile:    headers.Identifier,
+			Status:     fasthttp.StatusBadGateway,
+			Duration:   duration,
+			SessionID:  headers.SessionID,
+			RemoteAddr: ctx.RemoteAddr().String(),
+		})
 		return
 	}
 
 	// Handle the response with streaming support
 	h.handleResponse(ctx, response, start)
+	
+	// Track metrics and send events
+	duration := time.Since(start)
+	h.updateMetrics(response.Status, duration, len(response.Body))
+	h.sendRequestLog(ctx, headers, response.Status, duration)
+	h.sendMonitorEvent("request", RequestEventData{
+		Method:     string(ctx.Method()),
+		URL:        headers.TargetURL,
+		Profile:    headers.Identifier,
+		Status:     response.Status,
+		Duration:   duration,
+		SessionID:  headers.SessionID,
+		RemoteAddr: ctx.RemoteAddr().String(),
+	})
 }
 
 // RequestHeaders contains all extracted X-* headers for request configuration
@@ -446,6 +579,12 @@ func (h *Handler) sendError(ctx *fasthttp.RequestCtx, statusCode int, message st
 		"method", string(ctx.Method()),
 		"path", string(ctx.RequestURI()),
 	)
+	
+	// Track error metrics
+	if h.metrics != nil {
+		atomic.AddInt64(&h.metrics.TotalRequests, 1)
+		atomic.AddInt64(&h.metrics.FailedRequests, 1)
+	}
 }
 
 // getProfileNames returns a sorted list of available profile identifiers
@@ -541,4 +680,159 @@ func (h *Handler) Close() {
 	}
 	
 	h.logger.Info("All sessions closed successfully")
+}
+
+// sendRequestLog sends a request log entry to the log channel if available
+func (h *Handler) sendRequestLog(ctx *fasthttp.RequestCtx, headers *RequestHeaders, status int, duration time.Duration) {
+	if h.logChannel == nil {
+		return
+	}
+	
+	// Create log entry
+	logEntry := RequestLogEntry{
+		Timestamp:  time.Now(),
+		Method:     string(ctx.Method()),
+		URL:        headers.TargetURL,
+		Profile:    headers.Identifier,
+		Status:     status,
+		Duration:   duration,
+		SessionID:  headers.SessionID,
+		RemoteAddr: ctx.RemoteAddr().String(),
+	}
+	
+	// Send to channel (non-blocking)
+	select {
+	case h.logChannel <- logEntry:
+		// Successfully sent
+	default:
+		// Channel is full, skip this log entry
+	}
+}
+
+// updateMetrics updates the server metrics with request data
+func (h *Handler) updateMetrics(status int, duration time.Duration, responseBytes int) {
+	// Update atomic counters
+	atomic.AddInt64(&h.metrics.TotalRequests, 1)
+	atomic.AddInt64(&h.metrics.TotalBytes, int64(responseBytes))
+	
+	if status >= 200 && status < 400 {
+		atomic.AddInt64(&h.metrics.SuccessfulReqs, 1)
+	} else {
+		atomic.AddInt64(&h.metrics.FailedRequests, 1)
+	}
+	
+	// Update response times and calculate averages (protected by mutex)
+	h.metrics.mu.Lock()
+	h.metrics.LastRequestTime = time.Now()
+	
+	// Add response time to ring buffer
+	h.metrics.RequestTimes[h.metrics.responseIndex] = duration
+	h.metrics.responseIndex = (h.metrics.responseIndex + 1) % h.metrics.maxResponseTimes
+	
+	// Calculate average response time from ring buffer
+	var totalDuration time.Duration
+	validTimes := 0
+	for _, rt := range h.metrics.RequestTimes {
+		if rt > 0 {
+			totalDuration += rt
+			validTimes++
+		}
+	}
+	if validTimes > 0 {
+		h.metrics.AverageResponse = totalDuration / time.Duration(validTimes)
+	}
+	
+	// Calculate requests per second and error rate
+	uptime := time.Since(h.metrics.StartTime)
+	totalReqs := atomic.LoadInt64(&h.metrics.TotalRequests)
+	failedReqs := atomic.LoadInt64(&h.metrics.FailedRequests)
+	
+	if uptime.Seconds() > 0 {
+		h.metrics.RequestsPerSecond = float64(totalReqs) / uptime.Seconds()
+	}
+	
+	if totalReqs > 0 {
+		h.metrics.ErrorRate = (float64(failedReqs) / float64(totalReqs)) * 100.0
+	}
+	
+	h.metrics.mu.Unlock()
+	
+	// Send periodic metrics updates
+	if totalReqs%10 == 0 { // Send update every 10 requests
+		h.sendMetricsUpdate()
+	}
+}
+
+// sendMonitorEvent sends a monitoring event if the channel is available
+func (h *Handler) sendMonitorEvent(eventType string, data interface{}) {
+	if h.monitorChannel == nil {
+		return
+	}
+	
+	event := MonitorEvent{
+		Type:      eventType,
+		Timestamp: time.Now(),
+		Data:      data,
+	}
+	
+	// Send to channel (non-blocking)
+	select {
+	case h.monitorChannel <- event:
+		// Successfully sent
+	default:
+		// Channel is full, skip this event
+	}
+}
+
+// sendMetricsUpdate sends a metrics update event
+func (h *Handler) sendMetricsUpdate() {
+	h.metrics.mu.RLock()
+	metricsData := MetricsEventData{
+		TotalRequests:     atomic.LoadInt64(&h.metrics.TotalRequests),
+		SuccessfulReqs:    atomic.LoadInt64(&h.metrics.SuccessfulReqs),
+		FailedRequests:    atomic.LoadInt64(&h.metrics.FailedRequests),
+		ActiveSessions:    h.GetSessionCount(),
+		Uptime:            time.Since(h.metrics.StartTime),
+		RequestsPerSecond: h.metrics.RequestsPerSecond,
+		ErrorRate:         h.metrics.ErrorRate,
+		AverageResponse:   h.metrics.AverageResponse,
+		TotalBytes:        atomic.LoadInt64(&h.metrics.TotalBytes),
+	}
+	h.metrics.mu.RUnlock()
+	
+	h.sendMonitorEvent("metrics", metricsData)
+}
+
+// GetMetrics returns the current server metrics
+func (h *Handler) GetMetrics() MetricsEventData {
+	h.metrics.mu.RLock()
+	defer h.metrics.mu.RUnlock()
+	
+	return MetricsEventData{
+		TotalRequests:     atomic.LoadInt64(&h.metrics.TotalRequests),
+		SuccessfulReqs:    atomic.LoadInt64(&h.metrics.SuccessfulReqs),
+		FailedRequests:    atomic.LoadInt64(&h.metrics.FailedRequests),
+		ActiveSessions:    h.GetSessionCount(),
+		Uptime:            time.Since(h.metrics.StartTime),
+		RequestsPerSecond: h.metrics.RequestsPerSecond,
+		ErrorRate:         h.metrics.ErrorRate,
+		AverageResponse:   h.metrics.AverageResponse,
+		TotalBytes:        atomic.LoadInt64(&h.metrics.TotalBytes),
+	}
+}
+
+// StartPeriodicMetricsUpdates starts sending periodic metrics updates
+func (h *Handler) StartPeriodicMetricsUpdates(interval time.Duration) {
+	if h.monitorChannel == nil {
+		return
+	}
+	
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		
+		for range ticker.C {
+			h.sendMetricsUpdate()
+		}
+	}()
 }

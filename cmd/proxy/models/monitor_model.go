@@ -8,16 +8,19 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/Danny-Dasilva/CycleTLS-Proxy/internal/proxy"
 )
 
 // MonitorModel represents the live monitoring dashboard
 type MonitorModel struct {
-	width       int
-	height      int
-	lastUpdate  time.Time
-	stats       ServerStats
-	requests    []RequestLog
-	maxRequests int
+	width         int
+	height        int
+	lastUpdate    time.Time
+	stats         ServerStats
+	requests      []RequestLog
+	maxRequests   int
+	handler       *proxy.Handler     // Reference to proxy handler for real data
+	monitorChannel chan proxy.MonitorEvent // Channel to receive monitor events
 }
 
 // ServerStats represents server statistics
@@ -44,6 +47,12 @@ type RequestLog struct {
 // tickMsg is sent periodically to update the display
 type tickMsg time.Time
 
+// MonitorEventMsg wraps proxy monitor events for the Bubble Tea interface
+type MonitorEventMsg proxy.MonitorEvent
+
+// MetricsUpdateMsg contains updated server metrics
+type MetricsUpdateMsg proxy.MetricsEventData
+
 // NewMonitorModel creates a new monitoring model
 func NewMonitorModel() MonitorModel {
 	return MonitorModel{
@@ -56,11 +65,34 @@ func NewMonitorModel() MonitorModel {
 	}
 }
 
+// NewMonitorModelWithHandler creates a new monitoring model with handler reference
+func NewMonitorModelWithHandler(handler *proxy.Handler, monitorChannel chan proxy.MonitorEvent) MonitorModel {
+	return MonitorModel{
+		lastUpdate:     time.Now(),
+		maxRequests:    50,
+		requests:       make([]RequestLog, 0, 50),
+		handler:        handler,
+		monitorChannel: monitorChannel,
+		stats: ServerStats{
+			Uptime: 0,
+		},
+	}
+}
+
 // Init initializes the monitor model
 func (m MonitorModel) Init() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
-		return tickMsg(t)
-	})
+	cmds := []tea.Cmd{
+		tea.Tick(time.Second, func(t time.Time) tea.Msg {
+			return tickMsg(t)
+		}),
+	}
+	
+	// Add monitor event listener if channel is available
+	if m.monitorChannel != nil {
+		cmds = append(cmds, m.listenForMonitorEvents())
+	}
+	
+	return tea.Batch(cmds...)
 }
 
 // Update handles messages for the monitor model
@@ -71,11 +103,36 @@ func (m MonitorModel) Update(msg tea.Msg) (MonitorModel, tea.Cmd) {
 		m.height = msg.Height
 		
 	case tickMsg:
-		// Update stats (in a real implementation, this would fetch from the server)
-		m.updateStats()
-		return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
-			return tickMsg(t)
-		})
+		// Update stats from real server data if handler is available
+		if m.handler != nil {
+			m.updateStatsFromHandler()
+		} else {
+			// Fallback to mock data if no handler (shouldn't happen in normal operation)
+			m.updateStats()
+		}
+		
+		cmds := []tea.Cmd{
+			tea.Tick(time.Second, func(t time.Time) tea.Msg {
+				return tickMsg(t)
+			}),
+		}
+		
+		// Continue listening for monitor events
+		if m.monitorChannel != nil {
+			cmds = append(cmds, m.listenForMonitorEvents())
+		}
+		
+		return m, tea.Batch(cmds...)
+		
+	case MonitorEventMsg:
+		// Handle real-time monitor events
+		m.handleMonitorEvent(proxy.MonitorEvent(msg))
+		return m, m.listenForMonitorEvents() // Continue listening
+		
+	case MetricsUpdateMsg:
+		// Handle metrics updates
+		m.updateStatsFromMetrics(proxy.MetricsEventData(msg))
+		return m, nil
 	}
 	
 	return m, nil
@@ -102,14 +159,20 @@ func (m MonitorModel) View() string {
 	// Recent requests
 	content.WriteString(m.renderRequestLog())
 	
-	// Footer with last update time
+	// Footer with last update time and data source
 	footerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6C7B7F")).
 		Align(lipgloss.Center).
 		MarginTop(2)
 	
-	footer := footerStyle.Render(fmt.Sprintf("Last updated: %s • Auto-refresh every 1s • ESC to return", 
-		m.lastUpdate.Format("15:04:05")))
+	// Show data source in footer
+	dataSource := "Real-time data"
+	if m.handler == nil {
+		dataSource = "Mock data (no handler)"
+	}
+	
+	footer := footerStyle.Render(fmt.Sprintf("Last updated: %s • %s • Auto-refresh every 1s • ESC to return", 
+		m.lastUpdate.Format("15:04:05"), dataSource))
 	
 	content.WriteString("\n")
 	content.WriteString(footer)
@@ -282,11 +345,34 @@ func (m MonitorModel) renderRequestLog() string {
 	return content.String()
 }
 
-// updateStats updates the server statistics (mock implementation)
+// updateStatsFromHandler updates stats from the actual proxy handler
+func (m *MonitorModel) updateStatsFromHandler() {
+	m.lastUpdate = time.Now()
+	
+	if m.handler == nil {
+		return
+	}
+	
+	// Get real metrics from handler
+	metrics := m.handler.GetMetrics()
+	m.updateStatsFromMetrics(metrics)
+}
+
+// updateStatsFromMetrics updates the local stats from metrics data
+func (m *MonitorModel) updateStatsFromMetrics(metrics proxy.MetricsEventData) {
+	m.stats.Uptime = metrics.Uptime
+	m.stats.TotalRequests = metrics.TotalRequests
+	m.stats.ActiveSessions = metrics.ActiveSessions
+	m.stats.RequestsPerSec = metrics.RequestsPerSecond
+	m.stats.ErrorRate = metrics.ErrorRate
+	m.stats.AvgResponseTime = metrics.AverageResponse
+}
+
+// updateStats updates the server statistics (fallback mock implementation)
 func (m *MonitorModel) updateStats() {
 	m.lastUpdate = time.Now()
 	
-	// Mock data - in real implementation, this would fetch from the actual server
+	// Mock data - only used as fallback when no handler is available
 	m.stats.Uptime += time.Second
 	m.stats.TotalRequests += int64(m.generateRandomNumber(0, 3))
 	m.stats.ActiveSessions = m.generateRandomNumber(0, 15)
@@ -356,5 +442,60 @@ func getErrorRateColor(rate float64) lipgloss.Color {
 		return lipgloss.Color("#FFB86C") // Orange
 	} else {
 		return lipgloss.Color("#FF5555") // Red
+	}
+}
+
+// listenForMonitorEvents creates a command that listens for monitor events
+func (m *MonitorModel) listenForMonitorEvents() tea.Cmd {
+	if m.monitorChannel == nil {
+		return nil
+	}
+	
+	return func() tea.Msg {
+		select {
+		case event := <-m.monitorChannel:
+			return MonitorEventMsg(event)
+		default:
+			// Non-blocking read - return nil if no events available
+			return nil
+		}
+	}
+}
+
+// handleMonitorEvent processes incoming monitor events
+func (m *MonitorModel) handleMonitorEvent(event proxy.MonitorEvent) {
+	switch event.Type {
+	case "request":
+		if reqData, ok := event.Data.(proxy.RequestEventData); ok {
+			m.addRealRequest(reqData)
+		}
+	case "request_error":
+		if reqData, ok := event.Data.(proxy.RequestEventData); ok {
+			m.addRealRequest(reqData)
+		}
+	case "metrics":
+		if metricsData, ok := event.Data.(proxy.MetricsEventData); ok {
+			m.updateStatsFromMetrics(metricsData)
+		}
+	}
+}
+
+// addRealRequest adds a real request from the proxy handler to the log
+func (m *MonitorModel) addRealRequest(reqData proxy.RequestEventData) {
+	req := RequestLog{
+		Timestamp: time.Now(),
+		Method:    reqData.Method,
+		URL:       reqData.URL,
+		Profile:   reqData.Profile,
+		Status:    reqData.Status,
+		Duration:  reqData.Duration,
+		SessionID: reqData.SessionID,
+	}
+	
+	m.requests = append(m.requests, req)
+	
+	// Keep only the most recent requests
+	if len(m.requests) > m.maxRequests {
+		m.requests = m.requests[1:]
 	}
 }

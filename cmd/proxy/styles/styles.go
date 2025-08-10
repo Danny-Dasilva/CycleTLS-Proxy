@@ -100,61 +100,108 @@ var (
 			Bold(true)
 )
 
-// Responsive styles that adapt to terminal size
+// Responsive styles that adapt to terminal size with enhanced breakpoints
 func GetResponsiveStyle(width, height int) lipgloss.Style {
-	if width < 100 {
-		// Small terminal style
+	switch {
+	case width < 60:
+		// Tiny terminal style
+		return lipgloss.NewStyle().
+			Width(width - 2).
+			Height(height - 2).
+			Padding(0)
+	case width < 80:
+		// Small terminal style  
 		return lipgloss.NewStyle().
 			Width(width - 4).
 			Height(height - 4).
 			Padding(1)
-	} else {
+	case width < 120:
+		// Medium terminal style
+		return lipgloss.NewStyle().
+			Width(width - 6).
+			Height(height - 5).
+			Padding(1, 2)
+	case width < 160:
 		// Large terminal style
 		return lipgloss.NewStyle().
 			Width(width - 8).
 			Height(height - 6).
 			Padding(2)
+	default:
+		// Extra-large terminal style
+		return lipgloss.NewStyle().
+			Width(width - 12).
+			Height(height - 8).
+			Padding(2, 3)
 	}
 }
 
-// Panel styles for split-pane layout
+// Panel styles for split-pane layout with responsive sizing
 func GetLeftPanelStyle(width, height int, focused bool) lipgloss.Style {
-	panelWidth := width/2 - 2
+	// Use the provided width instead of calculating
+	panelWidth := width
+	
+	// Adjust padding and spacing based on terminal size
+	var padding int
+	var borderStyle lipgloss.Border
+	
+	switch {
+	case width < 60:
+		padding = 0
+		borderStyle = lipgloss.NormalBorder()
+	case width < 120:
+		padding = 1
+		borderStyle = lipgloss.RoundedBorder()
+	default:
+		padding = 2  
+		borderStyle = lipgloss.RoundedBorder()
+	}
 	
 	style := lipgloss.NewStyle().
 		Width(panelWidth).
 		Height(height - 4).
-		Padding(1)
+		Padding(padding).
+		Border(borderStyle)
 	
 	if focused {
-		style = style.
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(BorderFocused)
+		style = style.BorderForeground(BorderFocused)
 	} else {
-		style = style.
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(BorderUnfocused)
+		style = style.BorderForeground(BorderUnfocused)
 	}
 	
 	return style
 }
 
 func GetRightPanelStyle(width, height int, focused bool) lipgloss.Style {
-	panelWidth := width/2 - 2
+	// Use the provided width instead of calculating
+	panelWidth := width
+	
+	// Adjust padding and spacing based on terminal size
+	var padding int
+	var borderStyle lipgloss.Border
+	
+	switch {
+	case width < 60:
+		padding = 0
+		borderStyle = lipgloss.NormalBorder()
+	case width < 120:
+		padding = 1
+		borderStyle = lipgloss.RoundedBorder()
+	default:
+		padding = 2
+		borderStyle = lipgloss.RoundedBorder()
+	}
 	
 	style := lipgloss.NewStyle().
 		Width(panelWidth).
 		Height(height - 4).
-		Padding(1)
+		Padding(padding).
+		Border(borderStyle)
 	
 	if focused {
-		style = style.
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(BorderFocused)
+		style = style.BorderForeground(BorderFocused)
 	} else {
-		style = style.
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(BorderUnfocused)
+		style = style.BorderForeground(BorderUnfocused)
 	}
 	
 	return style

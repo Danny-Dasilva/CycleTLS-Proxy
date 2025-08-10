@@ -62,34 +62,34 @@ func NewConfigModel() ConfigModel {
 			Validator:   validateNumber,
 		},
 	}
-	
+
 	inputs := make([]textinput.Model, len(fields))
 	settings := make(map[string]string)
-	
+
 	for i, field := range fields {
 		ti := textinput.New()
 		ti.Placeholder = field.Default
 		ti.Focus()
 		ti.CharLimit = 50
 		ti.Width = 30
-		
+
 		// Get current value from environment or use default
 		currentValue := os.Getenv(field.Key)
 		if currentValue == "" {
 			currentValue = field.Default
 		}
 		ti.SetValue(currentValue)
-		
+
 		inputs[i] = ti
 		settings[field.Key] = currentValue
 	}
-	
+
 	// Only first input starts focused
 	inputs[0].Focus()
 	for i := 1; i < len(inputs); i++ {
 		inputs[i].Blur()
 	}
-	
+
 	return ConfigModel{
 		inputs:   inputs,
 		settings: settings,
@@ -108,7 +108,7 @@ func (m ConfigModel) Update(msg tea.Msg) (ConfigModel, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "tab", "down", "j":
@@ -120,18 +120,18 @@ func (m ConfigModel) Update(msg tea.Msg) (ConfigModel, tea.Cmd) {
 			m.saveSettings()
 		}
 	}
-	
+
 	// Update the current input
 	var cmd tea.Cmd
 	m.inputs[m.focused], cmd = m.inputs[m.focused].Update(msg)
-	
+
 	return m, cmd
 }
 
 // View renders the config model
 func (m ConfigModel) View() string {
 	var content strings.Builder
-	
+
 	// Header
 	headerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#61DAFB")).
@@ -139,11 +139,11 @@ func (m ConfigModel) View() string {
 		Padding(0, 1).
 		Width(m.width).
 		Align(lipgloss.Center)
-	
+
 	header := headerStyle.Render("⚙️ Configuration Settings")
 	content.WriteString(header)
 	content.WriteString("\n\n")
-	
+
 	// Configuration fields
 	fields := []ConfigField{
 		{"PORT", "Server Port", "Port for the proxy server to listen on", "8080", validatePort},
@@ -151,20 +151,20 @@ func (m ConfigModel) View() string {
 		{"DEFAULT_TIMEOUT", "Default Timeout", "Default request timeout in seconds", "30", validateTimeout},
 		{"MAX_SESSIONS", "Max Sessions", "Maximum number of concurrent sessions", "100", validateNumber},
 	}
-	
-	// Responsive layout
+
+	// Responsive 2x2 grid layout
 	if m.width < 80 {
-		// Compact vertical layout for small terminals
+		// Compact vertical layout for small terminals (fallback to original)
 		for i, field := range fields {
 			// Field label and description on same line
 			labelDescStyle := lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#FF6B9D")).
 				Bold(true)
-			
+
 			labelDesc := fmt.Sprintf("%s: %s", field.Label, field.Description)
 			content.WriteString(labelDescStyle.Render(labelDesc))
 			content.WriteString("\n")
-			
+
 			// Input field (smaller)
 			inputStyle := lipgloss.NewStyle().
 				BorderStyle(lipgloss.RoundedBorder()).
@@ -172,50 +172,19 @@ func (m ConfigModel) View() string {
 				Padding(0, 1).
 				MarginBottom(1).
 				Width(min(m.width-4, 40))
-			
+
 			if i == m.focused {
 				inputStyle = inputStyle.BorderForeground(lipgloss.Color("#FF6B9D"))
 			}
-			
+
 			content.WriteString(inputStyle.Render(m.inputs[i].View()))
 			content.WriteString("\n")
 		}
 	} else {
-		// Original layout for larger terminals
-		for i, field := range fields {
-			// Field label
-			labelStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FF6B9D")).
-				Bold(true)
-			
-			content.WriteString(labelStyle.Render(field.Label))
-			content.WriteString("\n")
-			
-			// Field description
-			descStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#6C7B7F")).
-				Italic(true)
-			
-			content.WriteString(descStyle.Render(field.Description))
-			content.WriteString("\n")
-			
-			// Input field
-			inputStyle := lipgloss.NewStyle().
-				BorderStyle(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("#61DAFB")).
-				Padding(0, 1).
-				MarginTop(1).
-				MarginBottom(2)
-			
-			if i == m.focused {
-				inputStyle = inputStyle.BorderForeground(lipgloss.Color("#FF6B9D"))
-			}
-			
-			content.WriteString(inputStyle.Render(m.inputs[i].View()))
-			content.WriteString("\n")
-		}
+		// 2x2 grid layout for larger terminals
+		content.WriteString(m.renderGrid(fields))
 	}
-	
+
 	// Current settings display (compact for small terminals)
 	if m.width < 80 {
 		// Show settings inline
@@ -223,14 +192,14 @@ func (m ConfigModel) View() string {
 			Foreground(lipgloss.Color("#98D8C8")).
 			Bold(true).
 			MarginTop(1)
-		
+
 		content.WriteString(settingsStyle.Render("Settings:"))
-		
+
 		settingValueStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFFFFF"))
-		
+
 		for key, value := range m.settings {
-			content.WriteString(fmt.Sprintf(" %s=%s", 
+			content.WriteString(fmt.Sprintf(" %s=%s",
 				lipgloss.NewStyle().Foreground(lipgloss.Color("#61DAFB")).Render(key),
 				settingValueStyle.Render(value)))
 		}
@@ -242,34 +211,108 @@ func (m ConfigModel) View() string {
 			BorderForeground(lipgloss.Color("#98D8C8")).
 			Padding(1, 2).
 			MarginTop(2)
-		
+
 		settingsContent := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#98D8C8")).
 			Bold(true).
 			Render("Current Settings:")
-		
+
 		settingsContent += "\n\n"
-		
+
 		for key, value := range m.settings {
-			settingsContent += fmt.Sprintf("%s = %s\n", 
+			settingsContent += fmt.Sprintf("%s = %s\n",
 				lipgloss.NewStyle().Foreground(lipgloss.Color("#61DAFB")).Render(key),
 				lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Render(value))
 		}
-		
+
 		content.WriteString(settingsStyle.Render(settingsContent))
 	}
-	
+
 	// Instructions
 	instructionStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6C7B7F")).
 		Align(lipgloss.Center).
 		Width(m.width).
 		MarginTop(1)
-	
+
 	instructions := "TAB/↑↓ to navigate • ENTER to save • ESC to return"
 	content.WriteString(instructionStyle.Render(instructions))
-	
+
 	return content.String()
+}
+
+// renderGrid renders the 2x2 grid layout for configuration fields
+func (m ConfigModel) renderGrid(fields []ConfigField) string {
+	// Calculate column width accounting for borders and spacing
+	colWidth := (m.width - 4) / 2 // Leave space for gaps between columns
+
+	// Render each field with borders
+	field0 := m.renderField(fields[0], 0, colWidth) // PORT
+	field1 := m.renderField(fields[1], 1, colWidth) // LOG_LEVEL
+	field2 := m.renderField(fields[2], 2, colWidth) // DEFAULT_TIMEOUT
+	field3 := m.renderField(fields[3], 3, colWidth) // MAX_SESSIONS
+
+	// Create rows with proper spacing
+	row1 := lipgloss.JoinHorizontal(lipgloss.Top, field0, field1)
+	row2 := lipgloss.JoinHorizontal(lipgloss.Top, field2, field3)
+
+	// Join rows vertically with small gap
+	grid := lipgloss.JoinVertical(lipgloss.Left, row1, "\n", row2)
+
+	return grid
+}
+
+// renderField renders an individual configuration field with full border enclosure
+func (m ConfigModel) renderField(field ConfigField, index int, width int) string {
+	var content strings.Builder
+
+	// Field label
+	labelStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FF6B9D")).
+		Bold(true).
+		MarginBottom(1)
+
+	content.WriteString(labelStyle.Render(field.Label))
+	content.WriteString("\n")
+
+	// Field description
+	descStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#6C7B7F")).
+		Italic(true).
+		MarginBottom(1)
+
+	content.WriteString(descStyle.Render(field.Description))
+	content.WriteString("\n")
+
+	// Input field
+	inputStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#61DAFB")).
+		Padding(0, 1).
+		Width(width - 8) // Account for container border, padding, and input border
+
+	// Highlight focused field
+	if index == m.focused {
+		inputStyle = inputStyle.BorderForeground(lipgloss.Color("#FF6B9D"))
+	}
+
+	content.WriteString(inputStyle.Render(m.inputs[index].View()))
+
+	// Wrap the entire field in a bordered container
+	fieldContainer := lipgloss.NewStyle().
+		Width(width - 4). // Leave space for horizontal gap
+		Height(8). // Fixed height for consistent alignment
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#61DAFB")).
+		Padding(1, 2). // Internal padding
+		Margin(0, 1) // External margin for spacing
+
+	// Highlight focused field container
+	if index == m.focused {
+		fieldContainer = fieldContainer.BorderForeground(lipgloss.Color("#FF6B9D"))
+	}
+
+	return fieldContainer.Render(content.String())
 }
 
 // min returns the minimum of two integers
@@ -297,7 +340,7 @@ func (m *ConfigModel) prevInput() {
 // saveSettings saves the current input values
 func (m *ConfigModel) saveSettings() {
 	fields := []string{"PORT", "LOG_LEVEL", "DEFAULT_TIMEOUT", "MAX_SESSIONS"}
-	
+
 	for i, key := range fields {
 		if i < len(m.inputs) {
 			value := m.inputs[i].Value()
