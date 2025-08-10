@@ -95,7 +95,23 @@ func (m *InteractiveApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.logo = models.NewGradientLogo(msg.Width, msg.Height)
 		}
 		
-		return m, nil
+		// Forward WindowSizeMsg to all sub-models
+		var cmds []tea.Cmd
+		
+		var cmd tea.Cmd
+		m.paramBrowserModel, cmd = m.paramBrowserModel.Update(msg)
+		cmds = append(cmds, cmd)
+		
+		m.profileModel, cmd = m.profileModel.Update(msg)
+		cmds = append(cmds, cmd)
+		
+		m.configModel, cmd = m.configModel.Update(msg)
+		cmds = append(cmds, cmd)
+		
+		m.monitorModel, cmd = m.monitorModel.Update(msg)
+		cmds = append(cmds, cmd)
+		
+		return m, tea.Batch(cmds...)
 		
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
@@ -268,10 +284,16 @@ func (m *InteractiveApp) renderMenu() string {
 		exampleCmd = fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-IDENTIFIER: chrome" http://localhost:%s`, m.port)
 	}
 	
+	// Add a tip about copying
+	tipStyle := styles.InfoStyle.Copy().
+		Foreground(styles.TextMuted).
+		MarginTop(1)
+	
 	exampleContent := fmt.Sprintf(
-		"%s\n%s",
+		"%s\n%s\n%s",
 		exampleHeaderStyle.Render("🚀 Quick Start Example:"),
 		exampleCommandStyle.Render(exampleCmd),
+		tipStyle.Render("💡 Tip: Select text to copy in your terminal"),
 	)
 	
 	example := exampleStyle.Render(exampleContent)

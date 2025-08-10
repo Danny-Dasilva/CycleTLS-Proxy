@@ -114,12 +114,17 @@ jobs:
           ls -la dist/
           file dist/${BINARY_NAME}
 
-      - name: Create archive
+      - name: Create versioned executable and archive
         run: |
           cd dist
           BINARY_NAME="cycletls-proxy${{ matrix.ext }}"
+          VERSION_NAME="cycletls-proxy-${{ steps.version.outputs.version }}-${{ matrix.name }}${{ matrix.ext }}"
           ARCHIVE_NAME="cycletls-proxy-${{ steps.version.outputs.version }}-${{ matrix.name }}"
           
+          # Create a copy with versioned name for direct download
+          cp "${BINARY_NAME}" "${VERSION_NAME}"
+          
+          # Create archive
           if [[ "${{ matrix.goos }}" == "windows" ]]; then
             # Create zip for Windows
             zip -9 "${ARCHIVE_NAME}.zip" "${BINARY_NAME}"
@@ -129,12 +134,21 @@ jobs:
             tar -czf "${ARCHIVE_NAME}.tar.gz" "${BINARY_NAME}"
             echo "ARCHIVE_FILE=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
           fi
+          
+          echo "VERSION_BINARY=${VERSION_NAME}" >> $GITHUB_ENV
 
       - name: Generate checksums
         run: |
           cd dist
+          # Checksum for archive
           sha256sum "${ARCHIVE_FILE}" > "${ARCHIVE_FILE}.sha256"
+          # Checksum for direct executable
+          sha256sum "${VERSION_BINARY}" > "${VERSION_BINARY}.sha256"
+          
+          echo "Archive checksum:"
           cat "${ARCHIVE_FILE}.sha256"
+          echo "Direct executable checksum:"
+          cat "${VERSION_BINARY}.sha256"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -143,6 +157,8 @@ jobs:
           path: |
             dist/${{ env.ARCHIVE_FILE }}
             dist/${{ env.ARCHIVE_FILE }}.sha256
+            dist/${{ env.VERSION_BINARY }}
+            dist/${{ env.VERSION_BINARY }}.sha256
           retention-days: 30
 
   create-release:
@@ -183,8 +199,23 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
+          
+          # Copy all archives and checksums
           find dist -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" | xargs -I {} cp {} release-assets/
+          
+          # Copy direct executables (but not the original build artifacts)
+          find dist -name "cycletls-proxy-*" -type f ! -name "*.tar.gz" ! -name "*.zip" ! -name "*.sha256" | xargs -I {} cp {} release-assets/
+          
+          echo "Release assets:"
           ls -la release-assets/
+          
+          echo ""
+          echo "Direct executables available:"
+          ls -la release-assets/ | grep -E "cycletls-proxy-.*-(linux|darwin|windows)" | grep -v ".tar.gz\|.zip\|.sha256" || echo "None found"
+          
+          echo ""
+          echo "Archives available:"
+          ls -la release-assets/ | grep -E "\.(tar\.gz|zip)$" || echo "None found"
 
       - name: Generate release notes
         id: release_notes
@@ -206,13 +237,25 @@ jobs:
           
           ## Installation
           
-          ### Binary Installation
+          ### Quick Download (Direct Executables)
           
-          Download the appropriate binary for your platform from the assets below:
+          For immediate use, download the executable directly:
           
-          - **Linux**: \`cycletls-proxy-${VERSION}-linux-amd64.tar.gz\`
-          - **macOS**: \`cycletls-proxy-${VERSION}-darwin-amd64.tar.gz\` (Intel) or \`cycletls-proxy-${VERSION}-darwin-arm64.tar.gz\` (Apple Silicon)
-          - **Windows**: \`cycletls-proxy-${VERSION}-windows-amd64.zip\`
+          - **Linux AMD64**: \`cycletls-proxy-${VERSION}-linux-amd64\`
+          - **Linux ARM64**: \`cycletls-proxy-${VERSION}-linux-arm64\` 
+          - **macOS Intel**: \`cycletls-proxy-${VERSION}-darwin-amd64\`
+          - **macOS Apple Silicon**: \`cycletls-proxy-${VERSION}-darwin-arm64\`
+          - **Windows AMD64**: \`cycletls-proxy-${VERSION}-windows-amd64.exe\`
+          - **Windows ARM64**: \`cycletls-proxy-${VERSION}-windows-arm64.exe\`
+          
+          After download, make executable (Linux/macOS): \`chmod +x cycletls-proxy-${VERSION}-*\`
+          
+          ### Archive Downloads (Traditional)
+          
+          If you prefer traditional archives:
+          
+          - **Linux/macOS**: \`cycletls-proxy-${VERSION}-{platform}-{arch}.tar.gz\`
+          - **Windows**: \`cycletls-proxy-${VERSION}-windows-{arch}.zip\`
           
           ## Verification
           

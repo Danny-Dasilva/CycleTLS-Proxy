@@ -42,9 +42,14 @@
 #### Option 1: Pre-built Binary (Recommended)
 
 ```bash
-# Download the latest release
-curl -L -o cycletls-proxy https://github.com/Danny-Dasilva/CycleTLS-Proxy/releases/latest/download/cycletls-proxy-linux-amd64
+# Download the latest release (replace {VERSION} with actual version, e.g., v1.0.0)
+curl -L -o cycletls-proxy https://github.com/Danny-Dasilva/CycleTLS-Proxy/releases/download/{VERSION}/cycletls-proxy-{VERSION}-linux-amd64
 chmod +x cycletls-proxy
+
+# Or for other platforms:
+# macOS Intel: cycletls-proxy-{VERSION}-darwin-amd64  
+# macOS Apple Silicon: cycletls-proxy-{VERSION}-darwin-arm64
+# Windows: cycletls-proxy-{VERSION}-windows-amd64.exe
 
 # Run the proxy
 ./cycletls-proxy

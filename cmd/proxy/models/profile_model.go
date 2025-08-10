@@ -88,21 +88,25 @@ func (m ProfileModel) Init() tea.Cmd {
 
 // Update handles messages for the profile model
 func (m ProfileModel) Update(msg tea.Msg) (ProfileModel, tea.Cmd) {
+	// Handle special cases first following Charmbracelet pattern
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.list.SetWidth(msg.Width)
-		m.list.SetHeight(msg.Height - 6) // Account for header/footer
+		// Set list dimensions with proper padding
+		m.list.SetSize(msg.Width-4, msg.Height-6)
+		
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
 			if item, ok := m.list.SelectedItem().(ProfileItem); ok {
 				m.selected = item.name
 			}
+			// Don't return here - let the list handle the enter key too
 		}
 	}
 	
+	// Always forward ALL messages to the list for proper navigation
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	
