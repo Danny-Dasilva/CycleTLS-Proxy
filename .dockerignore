@@ -1,0 +1,99 @@
+# Git
+.git
+.gitignore
+.gitattributes
+.gitmodules
+
+# Documentation
+*.md
+README*
+CHANGELOG*
+LICENSE*
+NOTICE*
+docs/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Build artifacts
+bin/
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go specific
+# vendor/  # Uncomment if you're not using Go modules
+
+# Test files and coverage
+*_test.go
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+
+# Docker files (don't need these in the image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Installation scripts (not needed in container)
+install.sh
+install.ps1
+
+# Examples and tests (typically not needed in production)
+examples/
+tests/
+
+# Node modules if any
+node_modules/
+
+# Python cache if any
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Monitoring configs (mounted separately if needed)
+monitoring/
+
+# SSL certificates (mounted separately)
+ssl/
+certs/
+*.pem
+*.key
+*.crt
+
+# Air config for development (if using air for hot reload)
+.air.toml
+
+# Any local configuration that shouldn't be in the image
+config/local.yaml
+config/development.yaml

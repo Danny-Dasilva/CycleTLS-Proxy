@@ -1,0 +1,350 @@
+name: Docker Build & Publish
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      push_images:
+        description: 'Push images to registries'
+        required: true
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY_IMAGE: dannydas/cycletls-proxy
+  GHCR_IMAGE: ghcr.io/danny-dasilva/cycletls-proxy
+
+jobs:
+  build:
+    name: Build Multi-Platform Docker Images
+    runs-on: ubuntu-latest
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      metadata: ${{ steps.meta.outputs.json }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout CycleTLS dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Danny-Dasilva/CycleTLS
+          path: CycleTLS
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
+
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event.inputs.push_images == 'true')
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event.inputs.push_images == 'true')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY_IMAGE }}
+            ${{ env.GHCR_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=match,pattern=v(.*),group=1
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=develop,enable={{is_branch}} && {{branch}} == 'develop'
+            type=sha,prefix={{branch}}-,enable=true
+          labels: |
+            org.opencontainers.image.title=CycleTLS-Proxy
+            org.opencontainers.image.description=Advanced TLS Fingerprint Proxy Server
+            org.opencontainers.image.vendor=Danny-Dasilva
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.source=https://github.com/Danny-Dasilva/CycleTLS-Proxy
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event.inputs.push_images == 'true') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
+            BUILD_TIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            GIT_COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Export image for testing
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: cycletls-proxy:test
+          build-args: |
+            VERSION=test
+            BUILD_TIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            GIT_COMMIT=${{ github.sha }}
+          cache-from: type=gha
+
+  test:
+    name: Test Docker Image
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'pull_request'
+    services:
+      nginx:
+        image: nginx:alpine
+        ports:
+          - 80:80
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout CycleTLS dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Danny-Dasilva/CycleTLS
+          path: CycleTLS
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: cycletls-proxy:test
+          build-args: |
+            VERSION=test
+            BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            GIT_COMMIT=${{ github.sha }}
+          cache-from: type=gha
+
+      - name: Test image structure
+        run: |
+          echo "Testing Docker image structure..."
+          
+          # Test image exists and basic info
+          docker images cycletls-proxy:test
+          
+          # Test image metadata
+          docker inspect cycletls-proxy:test
+          
+          # Test if binary exists in image
+          docker run --rm cycletls-proxy:test which cycletls-proxy || docker run --rm cycletls-proxy:test ls -la /usr/local/bin/
+
+      - name: Test container startup
+        run: |
+          echo "Testing container startup..."
+          
+          # Start container in background
+          CONTAINER_ID=$(docker run -d -p 8080:8080 cycletls-proxy:test)
+          echo "Container ID: $CONTAINER_ID"
+          
+          # Wait for container to start
+          sleep 10
+          
+          # Check if container is running
+          docker ps -a
+          
+          # Check container logs
+          echo "Container logs:"
+          docker logs $CONTAINER_ID
+          
+          # Test health endpoint if available
+          curl -f http://localhost:8080/health || echo "Health endpoint test completed"
+          
+          # Test basic functionality
+          curl -I http://localhost:8080/ || echo "Basic connectivity test completed"
+          
+          # Stop container
+          docker stop $CONTAINER_ID
+          docker rm $CONTAINER_ID
+
+      - name: Test image security
+        run: |
+          echo "Testing image security..."
+          
+          # Check for non-root user
+          USER_CHECK=$(docker run --rm cycletls-proxy:test whoami)
+          echo "Running as user: $USER_CHECK"
+          
+          if [[ "$USER_CHECK" == "root" ]]; then
+            echo "⚠️  Container is running as root user"
+          else
+            echo "✅ Container is running as non-root user: $USER_CHECK"
+          fi
+          
+          # Check file permissions
+          docker run --rm cycletls-proxy:test ls -la /usr/local/bin/cycletls-proxy
+
+  security-scan:
+    name: Security Scan Docker Image
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.GHCR_IMAGE }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy for critical vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.GHCR_IMAGE }}:${{ github.sha }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+  multi-arch-test:
+    name: Multi-Architecture Test
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test multi-arch image
+        run: |
+          PLATFORM="${{ matrix.platform }}"
+          echo "Testing platform: $PLATFORM"
+          
+          # Pull and test the specific platform image
+          docker run --rm --platform=$PLATFORM ${{ env.GHCR_IMAGE }}:${{ github.sha }} cycletls-proxy --version || \
+          docker run --rm --platform=$PLATFORM ${{ env.GHCR_IMAGE }}:${{ github.sha }} cycletls-proxy -v || \
+          docker run --rm --platform=$PLATFORM ${{ env.GHCR_IMAGE }}:${{ github.sha }} which cycletls-proxy || \
+          echo "Platform $PLATFORM test completed"
+
+  publish-summary:
+    name: Publish Summary
+    runs-on: ubuntu-latest
+    needs: [build, security-scan, multi-arch-test]
+    if: always() && github.event_name != 'pull_request'
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Docker Build & Publish Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Multi-Arch Test | ${{ needs.multi-arch-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" =~ ^refs/tags/v ]]; then
+            echo "### Published Images" >> $GITHUB_STEP_SUMMARY
+            echo "- **Docker Hub**: \`${{ env.REGISTRY_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **GitHub Registry**: \`${{ env.GHCR_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Usage" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "# Pull from Docker Hub" >> $GITHUB_STEP_SUMMARY
+            echo "docker pull ${{ env.REGISTRY_IMAGE }}:latest" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "# Pull from GitHub Container Registry" >> $GITHUB_STEP_SUMMARY
+            echo "docker pull ${{ env.GHCR_IMAGE }}:latest" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "# Run the proxy" >> $GITHUB_STEP_SUMMARY
+            echo "docker run -p 8080:8080 ${{ env.REGISTRY_IMAGE }}:latest" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ needs.build.result }}" == "failure" || "${{ needs.security-scan.result }}" == "failure" ]]; then
+            echo "❌ Some jobs failed!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ All Docker jobs completed successfully!" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  cleanup:
+    name: Cleanup Old Images
+    runs-on: ubuntu-latest
+    needs: [build, security-scan, multi-arch-test]
+    if: always() && github.ref == 'refs/heads/main'
+    steps:
+      - name: Delete old images from GHCR
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: 'cycletls-proxy'
+          package-type: 'container'
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

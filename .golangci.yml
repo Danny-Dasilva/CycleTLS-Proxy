@@ -1,0 +1,105 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+  allow-parallel-runners: true
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  gocyclo:
+    min-complexity: 15
+
+  goimports:
+    local-prefixes: github.com/Danny-Dasilva/CycleTLS-Proxy
+
+  govet:
+    check-shadowing: true
+    enable-all: true
+
+  misspell:
+    locale: US
+
+  unused:
+    check-exported: false
+
+  unparam:
+    check-exported: true
+
+  gosec:
+    excludes:
+      - G204  # Audit use of command execution
+      - G304  # File path provided as taint input
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    - gocyclo
+    - gofmt
+    - goimports
+    - misspell
+    - unparam
+    - gosec
+    - bodyclose
+    - exportloopref
+    - gocritic
+    - revive
+    - unconvert
+  
+  disable:
+    - exhaustive
+    - exhaustivestruct
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - goconst
+    - godot
+    - goerr113
+    - gomnd
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - ifshort
+    - lll
+    - maligned
+    - nakedret
+    - nestif
+    - nlreturn
+    - noctx
+    - paralleltest
+    - prealloc
+    - scopelint
+    - testpackage
+    - wsl
+
+issues:
+  exclude-use-default: false
+  exclude:
+    # EXC0001 errcheck: Almost all programs ignore errors on these functions and in most cases it's ok
+    - Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv). is not checked
+    # EXC0005 staticcheck: Developers tend to write in C-style with an explicit 'break' in a 'switch', so it's ok to ignore
+    - ineffective break statement. Did you mean to break out of the outer loop
+    
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+        - gocritic
+
+  max-issues-per-linter: 50
+  max-same-issues: 3
+  new-from-rev: origin/main
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true

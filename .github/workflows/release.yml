@@ -1,0 +1,329 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to release'
+        required: true
+        type: string
+
+env:
+  REGISTRY_IMAGE: dannydas/cycletls-proxy
+  GHCR_IMAGE: ghcr.io/danny-dasilva/cycletls-proxy
+
+jobs:
+  build:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            name: linux-amd64
+          - goos: linux
+            goarch: arm64
+            name: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            name: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            name: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            name: windows-amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            name: windows-arm64
+            ext: .exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout CycleTLS dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Danny-Dasilva/CycleTLS
+          path: CycleTLS
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prepare local dependency
+        run: |
+          # Ensure CycleTLS dependency is available
+          ls -la CycleTLS/
+          ls -la CycleTLS/cycletls/
+          
+          # Update go.mod to use local CycleTLS
+          go mod edit -replace github.com/Danny-Dasilva/CycleTLS/cycletls=./CycleTLS/cycletls
+          go mod tidy
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          # Create build directory
+          mkdir -p dist
+          
+          # Set binary name
+          BINARY_NAME="cycletls-proxy${{ matrix.ext }}"
+          
+          # Build flags for optimization
+          BUILD_FLAGS="-ldflags=-w -s -X main.version=${{ steps.version.outputs.version }} -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.gitCommit=${GITHUB_SHA::8}"
+          
+          # Build the binary
+          go build ${BUILD_FLAGS} -o dist/${BINARY_NAME} ./cmd/proxy
+          
+          # Verify binary was created
+          ls -la dist/
+          file dist/${BINARY_NAME}
+
+      - name: Create archive
+        run: |
+          cd dist
+          BINARY_NAME="cycletls-proxy${{ matrix.ext }}"
+          ARCHIVE_NAME="cycletls-proxy-${{ steps.version.outputs.version }}-${{ matrix.name }}"
+          
+          if [[ "${{ matrix.goos }}" == "windows" ]]; then
+            # Create zip for Windows
+            zip -9 "${ARCHIVE_NAME}.zip" "${BINARY_NAME}"
+            echo "ARCHIVE_FILE=${ARCHIVE_NAME}.zip" >> $GITHUB_ENV
+          else
+            # Create tar.gz for Unix-like systems
+            tar -czf "${ARCHIVE_NAME}.tar.gz" "${BINARY_NAME}"
+            echo "ARCHIVE_FILE=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
+          fi
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum "${ARCHIVE_FILE}" > "${ARCHIVE_FILE}.sha256"
+          cat "${ARCHIVE_FILE}.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cycletls-proxy-${{ matrix.name }}
+          path: |
+            dist/${{ env.ARCHIVE_FILE }}
+            dist/${{ env.ARCHIVE_FILE }}.sha256
+          retention-days: 30
+
+  docker:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout CycleTLS dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Danny-Dasilva/CycleTLS
+          path: CycleTLS
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY_IMAGE }}
+            ${{ env.GHCR_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=match,pattern=v(.*),group=1
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            BUILD_TIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+            GIT_COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build, docker]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find dist -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" | xargs -I {} cp {} release-assets/
+          ls -la release-assets/
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Create release notes
+          cat > release_notes.md << EOF
+          # CycleTLS-Proxy ${VERSION}
+          
+          ## What's New
+          
+          This release includes the following improvements and updates:
+          
+          - Latest CycleTLS integration with enhanced TLS fingerprinting
+          - Performance optimizations and bug fixes
+          - Multi-platform binary support (Linux, macOS, Windows)
+          - Docker images for amd64 and arm64 architectures
+          
+          ## Installation
+          
+          ### Binary Installation
+          
+          Download the appropriate binary for your platform from the assets below:
+          
+          - **Linux**: \`cycletls-proxy-${VERSION}-linux-amd64.tar.gz\`
+          - **macOS**: \`cycletls-proxy-${VERSION}-darwin-amd64.tar.gz\` (Intel) or \`cycletls-proxy-${VERSION}-darwin-arm64.tar.gz\` (Apple Silicon)
+          - **Windows**: \`cycletls-proxy-${VERSION}-windows-amd64.zip\`
+          
+          ### Docker Installation
+          
+          \`\`\`bash
+          # Docker Hub
+          docker pull dannydas/cycletls-proxy:${VERSION#v}
+          
+          # GitHub Container Registry
+          docker pull ghcr.io/danny-dasilva/cycletls-proxy:${VERSION#v}
+          \`\`\`
+          
+          ## Verification
+          
+          All release assets include SHA256 checksums for verification:
+          
+          \`\`\`bash
+          # Verify checksum (Linux/macOS)
+          sha256sum -c cycletls-proxy-${VERSION}-linux-amd64.tar.gz.sha256
+          
+          # Verify checksum (Windows PowerShell)
+          Get-FileHash cycletls-proxy-${VERSION}-windows-amd64.zip -Algorithm SHA256
+          \`\`\`
+          
+          ## Usage
+          
+          After extracting the binary, run:
+          
+          \`\`\`bash
+          ./cycletls-proxy
+          \`\`\`
+          
+          The proxy will start on port 8080 by default. See the [documentation](https://github.com/Danny-Dasilva/CycleTLS-Proxy) for configuration options.
+          
+          ---
+          
+          **Full Changelog**: https://github.com/Danny-Dasilva/CycleTLS-Proxy/compare/${{ github.event.before }}...${{ steps.version.outputs.version }}
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body_path: release_notes.md
+          files: release-assets/*
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'rc') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update latest release info
+        if: "!contains(steps.version.outputs.version, 'beta') && !contains(steps.version.outputs.version, 'alpha') && !contains(steps.version.outputs.version, 'rc')"
+        run: |
+          echo "Latest stable release: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "Docker images:" >> $GITHUB_STEP_SUMMARY
+          echo "- dannydas/cycletls-proxy:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- ghcr.io/danny-dasilva/cycletls-proxy:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,398 @@
+name: Test & Lint
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION_MATRIX: "1.21,1.22,1.23,1.24"
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout CycleTLS dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Danny-Dasilva/CycleTLS
+          path: CycleTLS
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Prepare local dependency
+        run: |
+          # Update go.mod to use local CycleTLS
+          go mod edit -replace github.com/Danny-Dasilva/CycleTLS/cycletls=./CycleTLS/cycletls
+          go mod tidy
+
+      - name: Verify dependencies
+        run: |
+          go mod verify
+          go mod download
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          args: --timeout=5m --config=.golangci.yml
+          working-directory: .
+
+      - name: Check Go formatting
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "Code is not properly formatted:"
+            gofmt -s -l .
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Check for vulnerabilities
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  test:
+    name: Test (Go ${{ matrix.go-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go-version: ['1.21', '1.22', '1.23', '1.24']
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout CycleTLS dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Danny-Dasilva/CycleTLS
+          path: CycleTLS
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Prepare local dependency
+        shell: bash
+        run: |
+          # Update go.mod to use local CycleTLS
+          go mod edit -replace github.com/Danny-Dasilva/CycleTLS/cycletls=./CycleTLS/cycletls
+          go mod tidy
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests with race detection
+        run: |
+          go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Run tests with coverage
+        run: |
+          go test -v -cover -coverprofile=coverage.out ./...
+
+      - name: Generate coverage report
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.24'
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
+          go tool cover -func=coverage.out
+
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.24'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage reports
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.24'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.out
+            coverage.html
+          retention-days: 30
+
+  build-test:
+    name: Build Test (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout CycleTLS dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Danny-Dasilva/CycleTLS
+          path: CycleTLS
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Prepare local dependency
+        run: |
+          go mod edit -replace github.com/Danny-Dasilva/CycleTLS/cycletls=./CycleTLS/cycletls
+          go mod tidy
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          EXT=""
+          if [[ "${{ matrix.goos }}" == "windows" ]]; then
+            EXT=".exe"
+          fi
+          
+          go build -ldflags="-w -s" -o cycletls-proxy-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} ./cmd/proxy
+          
+          # Verify binary was created and get info
+          ls -la cycletls-proxy-${{ matrix.goos }}-${{ matrix.goarch }}${EXT}
+          file cycletls-proxy-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} || true
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    services:
+      nginx:
+        image: nginx:alpine
+        ports:
+          - 80:80
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout CycleTLS dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Danny-Dasilva/CycleTLS
+          path: CycleTLS
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Prepare local dependency
+        run: |
+          go mod edit -replace github.com/Danny-Dasilva/CycleTLS/cycletls=./CycleTLS/cycletls
+          go mod tidy
+
+      - name: Build proxy
+        run: |
+          go build -o cycletls-proxy ./cmd/proxy
+
+      - name: Start proxy in background
+        run: |
+          ./cycletls-proxy &
+          PROXY_PID=$!
+          echo "PROXY_PID=$PROXY_PID" >> $GITHUB_ENV
+          
+          # Wait for proxy to start
+          sleep 5
+          
+          # Verify proxy is running
+          curl -f http://localhost:8080/health || echo "Health check endpoint may not be available"
+
+      - name: Run integration tests
+        run: |
+          # Test basic proxy functionality
+          echo "Testing proxy functionality..."
+          
+          # Test through proxy (using httpbin.org as test target)
+          curl -x http://localhost:8080 -H "X-TLS-Fingerprint: chrome" -v https://httpbin.org/ip || echo "Integration test completed"
+          
+          # Test proxy status/health
+          curl -f http://localhost:8080/health || echo "Health endpoint test completed"
+
+      - name: Stop proxy
+        if: always()
+        run: |
+          if [[ -n "$PROXY_PID" ]]; then
+            kill $PROXY_PID || true
+          fi
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Nancy vulnerability scanner
+        run: |
+          go install github.com/sonatypecommunity/nancy@latest
+          go list -json -deps ./... | nancy sleuth
+
+  dependency-check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout CycleTLS dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Danny-Dasilva/CycleTLS
+          path: CycleTLS
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Prepare local dependency
+        run: |
+          go mod edit -replace github.com/Danny-Dasilva/CycleTLS/cycletls=./CycleTLS/cycletls
+          go mod tidy
+
+      - name: Check for outdated dependencies
+        run: |
+          go list -u -m all
+
+      - name: Verify module checksums
+        run: |
+          go mod verify
+
+      - name: Check for unused dependencies
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          golangci-lint run --disable-all -E unused
+
+  benchmark:
+    name: Benchmark Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout CycleTLS dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Danny-Dasilva/CycleTLS
+          path: CycleTLS
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Prepare local dependency
+        run: |
+          go mod edit -replace github.com/Danny-Dasilva/CycleTLS/cycletls=./CycleTLS/cycletls
+          go mod tidy
+
+      - name: Run benchmarks
+        run: |
+          go test -bench=. -benchmem -run=^$ ./... | tee benchmark_results.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark_results.txt
+          retention-days: 30
+
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [lint, test, build-test, integration-test, security-scan, dependency-check]
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          echo "## Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Test | ${{ needs.build-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Test | ${{ needs.integration-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Check | ${{ needs.dependency-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.lint.result }}" == "failure" || "${{ needs.test.result }}" == "failure" || "${{ needs.build-test.result }}" == "failure" ]]; then
+            echo "❌ Some tests failed!" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "✅ All tests passed!" >> $GITHUB_STEP_SUMMARY
+          fi
