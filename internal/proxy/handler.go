@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/Danny-Dasilva/CycleTLS/cycletls"
-	cycleclient "github.com/Danny-Dasilva/CycleTLS-Proxy/internal/cycletls"
 	"github.com/Danny-Dasilva/CycleTLS-Proxy/internal/fingerprints"
 	"github.com/charmbracelet/log"
 	"github.com/valyala/fasthttp"
@@ -22,19 +21,19 @@ import (
 // It manages session state, validates headers, and forwards requests while
 // maintaining proper error handling and streaming support.
 type Handler struct {
-	profiles      map[string]fingerprints.Profile
-	clientManager *cycleclient.ClientManager
-	logger        *log.Logger
-	mu            sync.RWMutex // protects concurrent access
+	profiles       map[string]fingerprints.Profile
+	clients        map[string]*cycletls.CycleTLS
+	logger         *log.Logger
+	mu             sync.RWMutex // protects concurrent access
 	defaultTimeout time.Duration
 }
 
 // NewHandler creates a new proxy handler with default configuration.
-// It initializes the fingerprint profiles, client manager, and sets default timeouts.
+// It initializes the fingerprint profiles, clients map, and sets default timeouts.
 func NewHandler(logger *log.Logger) *Handler {
 	return &Handler{
 		profiles:       fingerprints.GetDefaultProfiles(),
-		clientManager:  cycleclient.NewClientManager(),
+		clients:        make(map[string]*cycletls.CycleTLS),
 		logger:         logger,
 		defaultTimeout: 30 * time.Second,
 	}
@@ -86,8 +85,8 @@ func (h *Handler) HandleRequest(ctx *fasthttp.RequestCtx) {
 	// Log incoming request
 	h.logRequest(ctx, headers)
 
-	// Get client for this session
-	client := h.clientManager.GetClient(headers.SessionID)
+	// Get or create client for this session
+	client := h.getClient(headers.SessionID)
 
 	// Build request options from profile and headers
 	options, err := h.buildRequestOptions(ctx, profile, headers)
@@ -192,6 +191,36 @@ func (h *Handler) getProfile(identifier string) (fingerprints.Profile, error) {
 	return profile, nil
 }
 
+// getClient returns a CycleTLS client for the given session ID, creating one if needed.
+// If sessionID is empty, creates a new client each time for one-time use.
+func (h *Handler) getClient(sessionID string) *cycletls.CycleTLS {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	
+	// Return new client for empty session ID (one-time use)
+	if sessionID == "" {
+		client := cycletls.Init()
+		return &client
+	}
+
+	// Return existing client if found
+	if client, exists := h.clients[sessionID]; exists {
+		h.logger.Debug("Reusing existing session", "session_id", sessionID)
+		return client
+	}
+
+	// Create new client for this session
+	client := cycletls.Init()
+	h.clients[sessionID] = &client
+	
+	h.logger.Debug("Created new session", 
+		"session_id", sessionID, 
+		"total_sessions", len(h.clients),
+	)
+	
+	return &client
+}
+
 // logRequest logs the incoming request with relevant details
 func (h *Handler) logRequest(ctx *fasthttp.RequestCtx, headers *RequestHeaders) {
 	h.logger.Info("Processing proxy request",
@@ -210,7 +239,7 @@ func (h *Handler) logRequest(ctx *fasthttp.RequestCtx, headers *RequestHeaders) 
 func (h *Handler) buildRequestOptions(ctx *fasthttp.RequestCtx, profile fingerprints.Profile, headers *RequestHeaders) (cycletls.Options, error) {
 	options := cycletls.Options{
 		Ja3:         profile.JA3,
-		Ja4:         profile.JA4,
+		// Ja4:         profile.JA4, // TODO: Enable when CycleTLS library supports JA4
 		UserAgent:   profile.UserAgent,
 		Timeout:     int(headers.Timeout.Seconds()),
 		Headers:     make(map[string]string),
@@ -332,12 +361,21 @@ func (h *Handler) GetAvailableProfiles() []string {
 
 // GetSessionCount returns the number of active sessions
 func (h *Handler) GetSessionCount() int {
-	return h.clientManager.GetActiveSessionsCount()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients)
 }
 
 // GetSessionIDs returns all active session identifiers
 func (h *Handler) GetSessionIDs() []string {
-	return h.clientManager.GetSessionIDs()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	
+	ids := make([]string, 0, len(h.clients))
+	for id := range h.clients {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // SetDefaultTimeout sets the default timeout for requests
@@ -354,7 +392,7 @@ func (h *Handler) handleHealthCheck(ctx *fasthttp.RequestCtx) {
 	defaultTimeout := h.defaultTimeout
 	h.mu.RUnlock()
 
-	activeSessionsCount := h.clientManager.GetActiveSessionsCount()
+	activeSessionsCount := h.GetSessionCount()
 
 	healthData := fmt.Sprintf(`{
   "status": "healthy",
@@ -383,7 +421,17 @@ func (h *Handler) handleHealthCheck(ctx *fasthttp.RequestCtx) {
 
 // Close gracefully shuts down the handler and closes all active sessions
 func (h *Handler) Close() {
-	h.logger.Info("Shutting down proxy handler", "active_sessions", h.clientManager.GetActiveSessionsCount())
-	h.clientManager.CloseAll()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	
+	sessionCount := len(h.clients)
+	h.logger.Info("Shutting down proxy handler", "active_sessions", sessionCount)
+	
+	// Close all active sessions
+	for sessionID, client := range h.clients {
+		client.Close()
+		delete(h.clients, sessionID)
+	}
+	
 	h.logger.Info("All sessions closed successfully")
 }

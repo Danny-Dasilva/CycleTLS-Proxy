@@ -1,6 +1,6 @@
 # Multi-stage Docker build for CycleTLS-Proxy
 # Stage 1: Build the application
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -14,18 +14,7 @@ WORKDIR /app
 # Copy go.mod and go.sum first for better layer caching
 COPY go.mod go.sum ./
 
-# Handle local CycleTLS dependency
-# First, create a temporary directory for the CycleTLS dependency
-RUN mkdir -p /tmp/cycletls
-
-# Copy the local CycleTLS dependency (this will be mounted during build)
-# Note: This assumes the CycleTLS directory is available at build time
-COPY ../CycleTLS/cycletls /tmp/cycletls/
-
-# Update go.mod to use the copied dependency
-RUN go mod edit -replace github.com/Danny-Dasilva/CycleTLS/cycletls=/tmp/cycletls
-
-# Download dependencies
+# Download dependencies (CycleTLS dependency is already properly configured)
 RUN go mod download && go mod verify
 
 # Copy source code

@@ -9,11 +9,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Danny-Dasilva/CycleTLS-Proxy/internal/fingerprints"
-	"github.com/Danny-Dasilva/CycleTLS-Proxy/internal/proxy"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/valyala/fasthttp"
+
+	"github.com/Danny-Dasilva/CycleTLS-Proxy/internal/fingerprints"
+	"github.com/Danny-Dasilva/CycleTLS-Proxy/internal/proxy"
 )
 
 var (
@@ -41,6 +43,15 @@ func main() {
 		return
 	}
 
+	// Handle server-only mode (bypass interactive UI)
+	serverOnly := false
+	for _, arg := range os.Args[1:] {
+		if arg == "--server" || arg == "-s" {
+			serverOnly = true
+			break
+		}
+	}
+
 	// Initialize logger with beautiful styling
 	logger := log.NewWithOptions(os.Stderr, log.Options{
 		ReportCaller:    false,
@@ -53,6 +64,33 @@ func main() {
 	// Get configuration
 	port := getEnv("PORT", "8080")
 
+	if serverOnly {
+		// Direct server mode (legacy behavior)
+		startServer(port, logger)
+		return
+	}
+
+	// Run interactive application
+	app := NewInteractiveApp(port, logger)
+	
+	program := tea.NewProgram(app, tea.WithAltScreen())
+	
+	model, err := program.Run()
+	if err != nil {
+		fmt.Printf("Error running interactive app: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if user wants to start the server
+	if finalApp, ok := model.(*InteractiveApp); ok {
+		if finalApp.ShouldStartServer() {
+			startServer(port, logger)
+		}
+	}
+}
+
+// startServer starts the proxy server
+func startServer(port string, logger *log.Logger) {
 	// Display startup banner
 	displayStartupBanner(port, logger)
 

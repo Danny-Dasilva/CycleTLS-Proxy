@@ -2,6 +2,8 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -67,8 +69,17 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          else
+            # Auto-generate version for main branch pushes
+            BUILD_DATE=$(date +%Y%m%d)
+            BUILD_TIME=$(date +%H%M)
+            SHORT_SHA=${GITHUB_SHA::7}
+            echo "version=dev-${BUILD_DATE}.${BUILD_TIME}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+            echo "is_release=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Prepare local dependency
@@ -156,8 +167,17 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          else
+            # Auto-generate version for main branch pushes
+            BUILD_DATE=$(date +%Y%m%d)
+            BUILD_TIME=$(date +%H%M)
+            SHORT_SHA=${GITHUB_SHA::7}
+            echo "version=dev-${BUILD_DATE}.${BUILD_TIME}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+            echo "is_release=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Set up QEMU
@@ -227,8 +247,17 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          else
+            # Auto-generate version for main branch pushes
+            BUILD_DATE=$(date +%Y%m%d)
+            BUILD_TIME=$(date +%H%M)
+            SHORT_SHA=${GITHUB_SHA::7}
+            echo "version=dev-${BUILD_DATE}.${BUILD_TIME}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+            echo "is_release=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Download all artifacts
@@ -311,11 +340,11 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: Release ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.is_release == 'true' && format('Release {0}', steps.version.outputs.version) || format('Development Build {0}', steps.version.outputs.version) }}
           body_path: release_notes.md
           files: release-assets/*
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'rc') }}
+          prerelease: ${{ steps.version.outputs.is_release == 'false' || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'rc') }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
