@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/log"
 
 	"github.com/Danny-Dasilva/CycleTLS-Proxy/cmd/proxy/models"
+	"github.com/Danny-Dasilva/CycleTLS-Proxy/cmd/proxy/styles"
 	"github.com/Danny-Dasilva/CycleTLS-Proxy/internal/fingerprints"
 	"github.com/Danny-Dasilva/CycleTLS-Proxy/internal/proxy"
 )
@@ -19,7 +20,7 @@ type AppMode int
 
 const (
 	ModeMenu AppMode = iota
-	ModeHelp
+	ModeParamBrowser
 	ModeProfiles
 	ModeServer
 	ModeConfig
@@ -37,10 +38,11 @@ type InteractiveApp struct {
 	profiles    map[string]fingerprints.Profile
 	
 	// Sub-models
-	helpModel    models.HelpModel
-	profileModel models.ProfileModel
-	configModel  models.ConfigModel
-	monitorModel models.MonitorModel
+	paramBrowserModel models.ParamBrowserModel
+	profileModel      models.ProfileModel
+	configModel       models.ConfigModel
+	monitorModel      models.MonitorModel
+	logo              *models.GradientLogo
 	
 	// State
 	quitting     bool
@@ -58,10 +60,11 @@ func NewInteractiveApp(port string, logger *log.Logger, handler ...*proxy.Handle
 		port:     port,
 		profiles: profiles,
 		
-		helpModel:    models.NewHelpModel(port),
-		profileModel: models.NewProfileModel(profiles),
-		configModel:  models.NewConfigModel(),
-		monitorModel: models.NewMonitorModel(),
+		paramBrowserModel: models.NewParamBrowserModel(port),
+		profileModel:      models.NewProfileModel(profiles),
+		configModel:       models.NewConfigModel(),
+		monitorModel:      models.NewMonitorModel(),
+		logo:              models.NewGradientLogo(0, 0),
 	}
 	
 	// If handler is provided, we're in server mode
@@ -86,6 +89,12 @@ func (m *InteractiveApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		
+		// Update logo dimensions
+		if m.logo != nil {
+			m.logo = models.NewGradientLogo(msg.Width, msg.Height)
+		}
+		
 		return m, nil
 		
 	case tea.KeyMsg:
@@ -94,9 +103,9 @@ func (m *InteractiveApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	
 	// Delegate to sub-models based on current mode
 	switch m.mode {
-	case ModeHelp:
+	case ModeParamBrowser:
 		var cmd tea.Cmd
-		m.helpModel, cmd = m.helpModel.Update(msg)
+		m.paramBrowserModel, cmd = m.paramBrowserModel.Update(msg)
 		return m, cmd
 		
 	case ModeProfiles:
@@ -154,7 +163,7 @@ func (m *InteractiveApp) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *InteractiveApp) handleMenuKeys(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "h", "?":
-		m.mode = ModeHelp
+		m.mode = ModeParamBrowser
 		return m, nil
 		
 	case "p":
@@ -191,8 +200,8 @@ func (m *InteractiveApp) View() string {
 	switch m.mode {
 	case ModeMenu:
 		return m.renderMenu()
-	case ModeHelp:
-		return m.renderHelp()
+	case ModeParamBrowser:
+		return m.renderParamBrowser()
 	case ModeProfiles:
 		return m.renderProfiles()
 	case ModeConfig:
@@ -208,159 +217,153 @@ func (m *InteractiveApp) View() string {
 
 // renderMenu renders the main menu
 func (m *InteractiveApp) renderMenu() string {
-	var b strings.Builder
 	
-	// Title banner
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(primaryColor).
-		Align(lipgloss.Center).
-		Width(m.width).
-		MarginBottom(1)
-	
-	title := titleStyle.Render(m.getASCIIBanner())
-	
-	// Subtitle with server status
-	subtitleStyle := lipgloss.NewStyle().
-		Foreground(secondaryColor).
-		Align(lipgloss.Center).
-		Width(m.width).
-		MarginBottom(2)
-	
-	var subtitle string
-	if m.serverMode {
-		statusStyle := lipgloss.NewStyle().Foreground(successColor).Bold(true)
-		subtitle = subtitleStyle.Render("Advanced TLS Fingerprint Proxy Server") + "\n" +
-			lipgloss.NewStyle().
-				Foreground(successColor).
-				Align(lipgloss.Center).
-				Width(m.width).
-				Render(statusStyle.Render("🟢 SERVER RUNNING") + " • Ready to accept requests")
+	// Render gradient logo
+	var title string
+	if m.width < 80 || m.height < 25 {
+		// Use compact version for small terminals
+		title = m.logo.RenderCompact()
 	} else {
-		subtitle = subtitleStyle.Render("Advanced TLS Fingerprint Proxy Server")
+		// Use full gradient logo
+		title = m.logo.RenderWithSubtitle("Advanced TLS Fingerprint Proxy Server")
 	}
 	
-	// Example command
+	// Server status
+	var statusLine string
+	if m.serverMode {
+		statusStyle := styles.SuccessStyle.Copy().
+			Align(lipgloss.Center).
+			Width(m.width).
+			MarginBottom(1)
+		statusLine = statusStyle.Render("🟢 SERVER RUNNING • Ready to accept requests")
+	}
+	
+	// Example command with responsive width
+	exampleWidth := m.width - 4
+	if exampleWidth < 60 {
+		exampleWidth = 60
+	}
+	
 	exampleStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(accentColor).
+		BorderForeground(styles.AccentOrange).
 		Padding(1, 2).
 		MarginBottom(2).
-		Width(m.width - 4).
+		Width(exampleWidth).
 		BorderTop(true).
 		BorderLeft(true).
 		BorderRight(true).
 		BorderBottom(true)
 	
-	// Create a gradient-like effect for the example box
-	exampleHeaderStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
-		Bold(true)
+	exampleHeaderStyle := styles.WarningStyle.Copy()
+	exampleCommandStyle := styles.CodeStyle.Copy().MarginTop(1)
 	
-	exampleCommandStyle := lipgloss.NewStyle().
-		Foreground(accentColor).
-		Background(lipgloss.Color("#1a1a1a")).
-		Padding(0, 1).
-		MarginTop(1)
+	var exampleCmd string
+	if m.width < 100 {
+		// Short version for small terminals
+		exampleCmd = fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" \
+     http://localhost:%s`, m.port)
+	} else {
+		// Full version
+		exampleCmd = fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-IDENTIFIER: chrome" http://localhost:%s`, m.port)
+	}
 	
 	exampleContent := fmt.Sprintf(
 		"%s\n%s",
 		exampleHeaderStyle.Render("🚀 Quick Start Example:"),
-		exampleCommandStyle.Render(
-			fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-IDENTIFIER: chrome" http://localhost:%s`, m.port),
-		),
+		exampleCommandStyle.Render(exampleCmd),
 	)
 	
 	example := exampleStyle.Render(exampleContent)
 	
-	// Menu options
+	// Menu options with responsive sizing
+	menuWidth := m.width - 4
+	if menuWidth < 60 {
+		menuWidth = 60
+	}
+	
 	menuStyle := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(successColor).
+		BorderForeground(styles.AccentGreen).
 		Padding(1, 2).
-		Width(m.width - 4)
-	
-	keyStyle := lipgloss.NewStyle().
-		Foreground(primaryColor).
-		Bold(true).
-		Background(lipgloss.Color("#2a2a2a")).
-		Padding(0, 1).
-		MarginRight(1)
-	
-	inactiveKeyStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
-		Background(lipgloss.Color("#1a1a1a")).
-		Padding(0, 1).
-		MarginRight(1)
+		Width(menuWidth)
 	
 	var menuItems []string
 	if m.serverMode {
 		menuItems = []string{
-			fmt.Sprintf("%s %s View interactive help & documentation", 
-				keyStyle.Render(" h "), "📚"),
+			fmt.Sprintf("%s %s Browse all parameters & examples", 
+				styles.KeyStyle("h"), "📋"),
 			fmt.Sprintf("%s %s Browse browser profiles (%d available)", 
-				keyStyle.Render(" p "), "🌐", len(m.profiles)),
+				styles.KeyStyle("p"), "🌐", len(m.profiles)),
 			fmt.Sprintf("%s %s Configure settings", 
-				keyStyle.Render(" c "), "⚙️"),
-			fmt.Sprintf("%s %s Test requests with the running server", 
-				keyStyle.Render(" t "), "🧪"),
+				styles.KeyStyle("c"), "⚙️"),
+			fmt.Sprintf("%s %s Test requests with running server", 
+				styles.KeyStyle("t"), "🧪"),
 			fmt.Sprintf("%s %s Live monitoring dashboard", 
-				keyStyle.Render(" m "), "📊"),
+				styles.KeyStyle("m"), "📊"),
 			fmt.Sprintf("%s %s Quit application (stops server)", 
-				keyStyle.Render(" q "), "👋"),
+				styles.KeyStyle("q"), "👋"),
 		}
 	} else {
+		inactiveKeyStyle := lipgloss.NewStyle().
+			Foreground(styles.TextDisabled).
+			Background(styles.BgTertiary).
+			Padding(0, 1).
+			MarginRight(1)
+		
 		menuItems = []string{
 			fmt.Sprintf("%s %s Start the proxy server", 
-				keyStyle.Render(" s "), "🚀"),
-			fmt.Sprintf("%s %s View interactive help & documentation", 
-				keyStyle.Render(" h "), "📚"),
+				styles.KeyStyle("s"), "🚀"),
+			fmt.Sprintf("%s %s Browse all parameters & examples", 
+				styles.KeyStyle("h"), "📋"),
 			fmt.Sprintf("%s %s Browse browser profiles (%d available)", 
-				keyStyle.Render(" p "), "🌐", len(m.profiles)),
+				styles.KeyStyle("p"), "🌐", len(m.profiles)),
 			fmt.Sprintf("%s %s Configure settings", 
-				keyStyle.Render(" c "), "⚙️"),
+				styles.KeyStyle("c"), "⚙️"),
 			fmt.Sprintf("%s %s Test requests", 
 				inactiveKeyStyle.Render(" t "), "🧪"),
 			fmt.Sprintf("%s %s Monitor (requires running server)", 
 				inactiveKeyStyle.Render(" m "), "📊"),
 			fmt.Sprintf("%s %s Quit application", 
-				keyStyle.Render(" q "), "👋"),
+				styles.KeyStyle("q"), "👋"),
 		}
 	}
 	
 	menu := menuStyle.Render(strings.Join(menuItems, "\n"))
 	
-	// Footer
-	footerStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
-		Align(lipgloss.Center).
-		Width(m.width).
+	// Footer with responsive content
+	var footerText string
+	if m.width < 100 {
+		// Compact footer for small terminals
+		footerText = fmt.Sprintf("localhost:%s • %d profiles", m.port, len(m.profiles))
+	} else {
+		// Full footer
+		footerText = fmt.Sprintf("🌍 Listening on localhost:%s • ⚡ Ready to serve TLS fingerprinted requests • 🔒 %d profiles available", m.port, len(m.profiles))
+	}
+	
+	footer := styles.StatusBarStyle(m.width).
 		MarginTop(1).
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderTop(true).
-		BorderForeground(lipgloss.Color("#333333")).
-		PaddingTop(1)
+		BorderForeground(styles.BorderMuted).
+		PaddingTop(1).
+		Render(footerText)
 	
-	footer := footerStyle.Render(fmt.Sprintf("🌍 Listening on localhost:%s • ⚡ Ready to serve TLS fingerprinted requests • 🔒 %d profiles available", m.port, len(m.profiles)))
+	// Assemble the view
+	parts := []string{title}
 	
-	b.WriteString(title)
-	b.WriteString("\n")
-	b.WriteString(subtitle)
-	b.WriteString("\n")
-	b.WriteString(example)
-	b.WriteString("\n")
-	b.WriteString(menu)
-	b.WriteString("\n")
-	b.WriteString(footer)
+	if statusLine != "" {
+		parts = append(parts, statusLine)
+	}
 	
-	return b.String()
+	parts = append(parts, example, menu, footer)
+	
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
-// renderHelp renders the help view
-func (m *InteractiveApp) renderHelp() string {
-	header := m.renderModeHeader("Interactive Help & Documentation", "Press [esc] to return to menu")
-	content := m.helpModel.View()
-	return header + "\n" + content
+// renderParamBrowser renders the parameter browser view
+func (m *InteractiveApp) renderParamBrowser() string {
+	return m.paramBrowserModel.View()
 }
 
 // renderProfiles renders the profiles view
@@ -393,14 +396,11 @@ func (m *InteractiveApp) renderTest() string {
 
 // renderModeHeader renders a consistent header for different modes
 func (m *InteractiveApp) renderModeHeader(title, subtitle string) string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(primaryColor).
-		Align(lipgloss.Center).
+	titleStyle := styles.TitleStyle.Copy().
 		Width(m.width)
 	
 	subtitleStyle := lipgloss.NewStyle().
-		Foreground(mutedColor).
+		Foreground(styles.TextMuted).
 		Align(lipgloss.Center).
 		Width(m.width).
 		MarginBottom(1)
@@ -410,33 +410,13 @@ func (m *InteractiveApp) renderModeHeader(title, subtitle string) string {
 
 // renderGoodbye renders the goodbye message
 func (m *InteractiveApp) renderGoodbye() string {
-	style := lipgloss.NewStyle().
-		Foreground(primaryColor).
-		Bold(true).
-		Align(lipgloss.Center).
+	style := styles.TitleStyle.Copy().
 		Width(m.width).
 		MarginTop(2)
 	
 	return style.Render("Thank you for using CycleTLS-Proxy! 👋")
 }
 
-// getASCIIBanner returns the ASCII art banner
-func (m *InteractiveApp) getASCIIBanner() string {
-	return `
- ██████╗██╗   ██╗ ██████╗██╗     ███████╗████████╗██╗     ███████╗
-██╔════╝╚██╗ ██╔╝██╔════╝██║     ██╔════╝╚══██╔══╝██║     ██╔════╝
-██║      ╚████╔╝ ██║     ██║     █████╗     ██║   ██║     ███████╗
-██║       ╚██╔╝  ██║     ██║     ██╔══╝     ██║   ██║     ╚════██║
-╚██████╗   ██║   ╚██████╗███████╗███████╗   ██║   ███████╗███████║
- ╚═════╝   ╚═╝    ╚═════╝╚══════╝╚══════╝   ╚═╝   ╚══════╝╚══════╝
-
-             ██████╗ ██████╗  ██████╗ ██╗  ██╗██╗   ██╗
-             ██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝╚██╗ ██╔╝
-             ██████╔╝██████╔╝██║   ██║ ╚███╔╝  ╚████╔╝ 
-             ██╔═══╝ ██╔══██╗██║   ██║ ██╔██╗   ╚██╔╝  
-             ██║     ██║  ██║╚██████╔╝██╔╝ ██╗   ██║   
-             ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   `
-}
 
 // ShouldStartServer returns true if the user chose to start the server
 func (m *InteractiveApp) ShouldStartServer() bool {

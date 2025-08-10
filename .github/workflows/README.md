@@ -50,7 +50,7 @@ Creates production releases with binaries and Docker images when version tags ar
 **Artifacts:**
 - `cycletls-proxy-VERSION-PLATFORM-ARCH.tar.gz` (Unix-like)
 - `cycletls-proxy-VERSION-PLATFORM-ARCH.zip` (Windows)
-- `dannydas/cycletls-proxy:VERSION` (Docker Hub)
+- `dannydasilva/cycletls-proxy:VERSION` (Docker Hub)
 - `ghcr.io/danny-dasilva/cycletls-proxy:VERSION` (GHCR)
 
 ### 🐳 docker.yml - Docker Build & Publish

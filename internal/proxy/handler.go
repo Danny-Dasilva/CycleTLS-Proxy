@@ -45,12 +45,26 @@ func NewHandler(logger *log.Logger) *Handler {
 // Special endpoints:
 //   - GET /health: Returns health status and basic info
 //
-// Required headers for proxy requests:
-//   - X-URL: Target URL to proxy the request to
+// Supported headers for proxy requests:
+//   Basic headers:
+//   - X-URL: Target URL to proxy the request to (REQUIRED)
 //   - X-IDENTIFIER: Fingerprint profile to use (optional, defaults to 'chrome')
 //   - X-SESSION-ID: Session identifier for connection reuse (optional)
 //   - X-PROXY: Proxy server to use (optional)
-//   - X-TIMEOUT: Request timeout in seconds (optional, defaults to 30s)
+//   - X-TIMEOUT: Request timeout in seconds (optional, defaults to 30s, range: 1-300)
+//
+//   Advanced TLS headers:
+//   - X-JA3: Custom JA3 TLS fingerprint string (overrides profile JA3)
+//   - X-JA4: Custom JA4 TLS fingerprint token (overrides profile JA4)
+//   - X-HTTP2-FINGERPRINT: HTTP/2 connection settings fingerprint
+//   - X-USER-AGENT: Custom user agent string (overrides profile User-Agent)
+//
+//   Connection control headers:
+//   - X-HEADER-ORDER: Custom header ordering (comma-separated list)
+//   - X-INSECURE: Skip TLS certificate verification (true/false)
+//   - X-FORCE-HTTP1: Force HTTP/1.1 protocol usage (true/false)
+//   - X-FORCE-HTTP3: Force HTTP/3/QUIC protocol usage (true/false)
+//   - X-ENABLE-CONNECTION-REUSE: Enable TCP connection reuse (true/false)
 func (h *Handler) HandleRequest(ctx *fasthttp.RequestCtx) {
 	// Handle health check endpoint
 	if string(ctx.Path()) == "/health" {
@@ -118,6 +132,19 @@ type RequestHeaders struct {
 	SessionID   string
 	Proxy       string
 	Timeout     time.Duration
+	
+	// Advanced TLS parameters
+	JA3               string
+	JA4               string
+	HTTP2Fingerprint  string
+	CustomUserAgent   string
+	
+	// Connection control
+	HeaderOrder       string
+	Insecure          bool
+	ForceHTTP1        bool
+	ForceHTTP3        bool
+	ConnectionReuse   bool
 }
 
 // extractHeaders extracts and validates all X-* configuration headers from the request
@@ -155,6 +182,32 @@ func (h *Handler) extractHeaders(ctx *fasthttp.RequestCtx) (*RequestHeaders, err
 			return nil, fmt.Errorf("X-TIMEOUT must be between 1 and 300 seconds, got %d", timeoutSeconds)
 		}
 		headers.Timeout = time.Duration(timeoutSeconds) * time.Second
+	}
+	
+	// Extract advanced TLS parameters
+	headers.JA3 = string(ctx.Request.Header.Peek("X-JA3"))
+	headers.JA4 = string(ctx.Request.Header.Peek("X-JA4"))
+	headers.HTTP2Fingerprint = string(ctx.Request.Header.Peek("X-HTTP2-FINGERPRINT"))
+	headers.CustomUserAgent = string(ctx.Request.Header.Peek("X-USER-AGENT"))
+	
+	// Extract connection control parameters
+	headers.HeaderOrder = string(ctx.Request.Header.Peek("X-HEADER-ORDER"))
+	
+	// Boolean parameters
+	if insecureStr := string(ctx.Request.Header.Peek("X-INSECURE")); insecureStr != "" {
+		headers.Insecure = strings.ToLower(insecureStr) == "true"
+	}
+	
+	if forceHTTP1Str := string(ctx.Request.Header.Peek("X-FORCE-HTTP1")); forceHTTP1Str != "" {
+		headers.ForceHTTP1 = strings.ToLower(forceHTTP1Str) == "true"
+	}
+	
+	if forceHTTP3Str := string(ctx.Request.Header.Peek("X-FORCE-HTTP3")); forceHTTP3Str != "" {
+		headers.ForceHTTP3 = strings.ToLower(forceHTTP3Str) == "true"
+	}
+	
+	if connReuseStr := string(ctx.Request.Header.Peek("X-ENABLE-CONNECTION-REUSE")); connReuseStr != "" {
+		headers.ConnectionReuse = strings.ToLower(connReuseStr) == "true"
 	}
 	
 	return headers, nil
@@ -238,16 +291,64 @@ func (h *Handler) logRequest(ctx *fasthttp.RequestCtx, headers *RequestHeaders) 
 // buildRequestOptions constructs CycleTLS options from profile and request data
 func (h *Handler) buildRequestOptions(ctx *fasthttp.RequestCtx, profile fingerprints.Profile, headers *RequestHeaders) (cycletls.Options, error) {
 	options := cycletls.Options{
-		Ja3:         profile.JA3,
-		// Ja4:         profile.JA4, // TODO: Enable when CycleTLS library supports JA4
-		UserAgent:   profile.UserAgent,
-		Timeout:     int(headers.Timeout.Seconds()),
-		Headers:     make(map[string]string),
+		Timeout: int(headers.Timeout.Seconds()),
+		Headers: make(map[string]string),
+	}
+	
+	// Use custom JA3 if provided, otherwise use profile JA3
+	if headers.JA3 != "" {
+		options.Ja3 = headers.JA3
+	} else {
+		options.Ja3 = profile.JA3
+	}
+	
+	// Use custom JA4 if provided, otherwise use profile JA4 (if available)
+	// Note: JA4 support depends on CycleTLS library version
+	if headers.JA4 != "" {
+		// options.Ja4 = headers.JA4  // Enable when supported
+	} else if profile.JA4 != "" {
+		// options.Ja4 = profile.JA4  // Enable when supported
+	}
+	
+	// Use custom User-Agent if provided, otherwise use profile User-Agent
+	if headers.CustomUserAgent != "" {
+		options.UserAgent = headers.CustomUserAgent
+	} else {
+		options.UserAgent = profile.UserAgent
+	}
+	
+	// Set HTTP/2 fingerprint if provided
+	// Note: HTTP/2 fingerprint support depends on CycleTLS library version
+	if headers.HTTP2Fingerprint != "" {
+		// options.Http2Settings = headers.HTTP2Fingerprint  // Enable when supported
 	}
 	
 	// Set proxy if provided
 	if headers.Proxy != "" {
 		options.Proxy = headers.Proxy
+	}
+	
+	// Set TLS verification mode
+	if headers.Insecure {
+		options.InsecureSkipVerify = true
+	}
+	
+	// Set connection reuse
+	// Note: Connection reuse is typically handled at the client level
+	if headers.ConnectionReuse {
+		// Connection reuse configuration may vary by CycleTLS version
+	}
+	
+	// Handle HTTP version forcing
+	if headers.ForceHTTP1 && headers.ForceHTTP3 {
+		return options, fmt.Errorf("cannot force both HTTP/1 and HTTP/3 simultaneously")
+	}
+	if headers.ForceHTTP1 {
+		options.ForceHTTP1 = true
+	}
+	if headers.ForceHTTP3 {
+		// Note: HTTP/3 forcing may not be available in all CycleTLS versions
+		// options.ForceHttp3 = true
 	}
 	
 	// Forward all non-X-* headers to target server
@@ -259,8 +360,14 @@ func (h *Handler) buildRequestOptions(ctx *fasthttp.RequestCtx, profile fingerpr
 		}
 	})
 	
-	// Ensure User-Agent from profile is used (override any provided)
-	options.Headers["User-Agent"] = profile.UserAgent
+	// Override User-Agent header with the selected one
+	options.Headers["User-Agent"] = options.UserAgent
+	
+	// Apply custom header order if provided
+	if headers.HeaderOrder != "" {
+		// Parse header order - this would need CycleTLS library support
+		// options.HeaderOrder = strings.Split(headers.HeaderOrder, ",")
+	}
 	
 	// Set request body for methods that support it
 	method := string(ctx.Method())

@@ -403,30 +403,6 @@ docker service create \
 docker service scale cycletls-proxy=5
 ```
 
-## Performance & Limitations
-
-### Performance Characteristics
-
-- **Throughput**: 10,000+ requests/second on modern hardware
-- **Latency**: ~2ms additional overhead per request
-- **Memory Usage**: ~50MB base + ~1MB per active session
-- **CPU Usage**: Low CPU overhead for fingerprint generation
-
-### Resource Recommendations
-
-| Deployment | CPU | Memory | Concurrent Sessions |
-|------------|-----|--------|-------------------|
-| Development | 1 core | 512MB | 100 |
-| Production | 2+ cores | 1GB+ | 1,000+ |
-| High Scale | 4+ cores | 2GB+ | 10,000+ |
-
-### Limitations
-
-- Maximum 300-second timeout per request
-- Session storage is in-memory only
-- Some websites may detect automated traffic despite fingerprint spoofing
-- Requires proper upstream proxy for anonymity
-
 ## Monitoring & Observability
 
 ### Health Checks
@@ -575,21 +551,9 @@ go build -o cycletls-proxy ./cmd/proxy
 ./cycletls-proxy
 ```
 
-### Adding Browser Profiles
-
-1. Add profile to `internal/fingerprints/profiles.go`
-2. Update tests in `internal/fingerprints/profiles_test.go`
-3. Add documentation and examples
-4. Submit pull request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## Acknowledgments
 
 - Built on top of [CycleTLS](https://github.com/Danny-Dasilva/CycleTLS)
-- Inspired by the need for better TLS fingerprint spoofing
 - Thanks to the Go community for excellent networking libraries
 
 ## Support
@@ -603,4 +567,3 @@ If you find this project useful, consider:
 
 ---
 
-**Disclaimer**: This tool is for educational and testing purposes. Users are responsible for compliance with all applicable laws and terms of service.

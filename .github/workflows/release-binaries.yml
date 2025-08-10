@@ -1,4 +1,4 @@
-name: Release
+name: Release Binaries
 
 on:
   push:
@@ -12,10 +12,6 @@ on:
         description: 'Version tag to release'
         required: true
         type: string
-
-env:
-  REGISTRY_IMAGE: danny-dasilva/cycletls-proxy
-  GHCR_IMAGE: ghcr.io/danny-dasilva/cycletls-proxy
 
 jobs:
   build:
@@ -51,13 +47,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Checkout CycleTLS dependency
-        uses: actions/checkout@v4
-        with:
-          repository: Danny-Dasilva/CycleTLS
-          path: CycleTLS
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -81,16 +70,6 @@ jobs:
             echo "version=dev-${BUILD_DATE}.${BUILD_TIME}-${SHORT_SHA}" >> $GITHUB_OUTPUT
             echo "is_release=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Prepare local dependency
-        run: |
-          # Ensure CycleTLS dependency is available
-          ls -la CycleTLS/
-          ls -la CycleTLS/cycletls/
-          
-          # Update go.mod to use local CycleTLS
-          go mod edit -replace github.com/Danny-Dasilva/CycleTLS/cycletls=./CycleTLS/cycletls
-          go mod tidy
 
       - name: Build binary
         env:

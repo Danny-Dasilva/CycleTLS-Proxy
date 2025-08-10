@@ -1,0 +1,57 @@
+name: Repository Status
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  status:
+    name: Check Repository Status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check configuration
+        run: |
+          echo "## Repository Configuration Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Available Features" >> $GITHUB_STEP_SUMMARY
+          echo "| Feature | Status | Notes |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Binary releases
+          echo "| 📦 Binary Releases | ✅ Enabled | Always available |" >> $GITHUB_STEP_SUMMARY
+          
+          # Docker publishing
+          if [[ "${{ secrets.DOCKER_USERNAME }}" != "" ]]; then
+            echo "| 🐳 Docker Publishing | ✅ Enabled | Docker Hub + GHCR |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🐳 Docker Publishing | ❌ Disabled | Missing Docker credentials |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Tests
+          echo "| 🧪 Automated Tests | ✅ Enabled | Unit + Integration tests |" >> $GITHUB_STEP_SUMMARY
+          
+          # Security scanning
+          if [[ "${{ secrets.DOCKER_USERNAME }}" != "" ]]; then
+            echo "| 🔒 Security Scanning | ✅ Enabled | Trivy vulnerability scanner |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🔒 Security Scanning | ❌ Disabled | Requires Docker images |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Setup Instructions" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ secrets.DOCKER_USERNAME }}" == "" ]]; then
+            echo "To enable Docker publishing:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Read [DOCKER_SETUP.md](./DOCKER_SETUP.md) for detailed instructions" >> $GITHUB_STEP_SUMMARY
+            echo "2. Set up DOCKER_USERNAME and DOCKER_PASSWORD secrets" >> $GITHUB_STEP_SUMMARY
+            echo "3. Create Docker Hub repository: danny-dasilva/cycletls-proxy" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ All features are properly configured!" >> $GITHUB_STEP_SUMMARY
+          fi
