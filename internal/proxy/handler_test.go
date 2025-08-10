@@ -373,18 +373,18 @@ func BenchmarkGetProfile(b *testing.B) {
 // Test helper functions
 func createTestContext(method, url string, headers map[string]string, body string) *fasthttp.RequestCtx {
 	ctx := &fasthttp.RequestCtx{}
-	
+
 	// Set method
 	ctx.Request.Header.SetMethod(method)
-	
+
 	// Set headers
 	for key, value := range headers {
 		ctx.Request.Header.Set(key, value)
 	}
-	
+
 	// Set body
 	ctx.Request.SetBodyString(body)
-	
+
 	return ctx
 }
 

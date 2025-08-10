@@ -168,7 +168,7 @@ resp = make_request("https://httpbin.org/ip", identifier="firefox")
 print(resp.json())`,
 		},
 		{
-			Title: "🟨 Node.js Example", 
+			Title: "🟨 Node.js Example",
 			Content: `const axios = require('axios');
 
 async function makeRequest(url, options = {}) {
@@ -286,54 +286,54 @@ func (m HelpModel) View() string {
 		// Initialize with default content if not ready
 		return m.generateContent()
 	}
-	
+
 	headerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#61DAFB")).
 		Bold(true).
 		Padding(0, 1)
-	
+
 	footerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6C7B7F")).
 		Padding(0, 1)
-	
+
 	header := headerStyle.Render("📚 Interactive Documentation")
 	footer := footerStyle.Render("↑/↓ to scroll • ESC to return to menu")
-	
+
 	return header + "\n" + m.viewport.View() + "\n" + footer
 }
 
 // generateContent generates the formatted help content
 func (m HelpModel) generateContent() string {
 	var content strings.Builder
-	
+
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FF6B9D")).
 		Bold(true).
 		MarginTop(1).
 		MarginBottom(1)
-	
+
 	contentStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFFFFF")).
 		MarginBottom(2).
 		PaddingLeft(2)
-	
+
 	codeStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#61DAFB")).
 		Background(lipgloss.Color("#2D3748")).
 		Padding(1).
 		MarginTop(1).
 		MarginBottom(1)
-	
+
 	for _, section := range m.sections {
 		content.WriteString(titleStyle.Render(section.Title))
 		content.WriteString("\n")
-		
+
 		// Process content to highlight code blocks
 		lines := strings.Split(section.Content, "\n")
 		var processedContent strings.Builder
 		inCodeBlock := false
 		var codeBlock strings.Builder
-		
+
 		for _, line := range lines {
 			if strings.HasPrefix(line, "curl ") || strings.HasPrefix(line, "  curl ") {
 				if inCodeBlock {
@@ -355,16 +355,16 @@ func (m HelpModel) generateContent() string {
 				processedContent.WriteString(line + "\n")
 			}
 		}
-		
+
 		// Handle any remaining code block
 		if inCodeBlock {
 			processedContent.WriteString(codeStyle.Render(codeBlock.String()))
 			processedContent.WriteString("\n")
 		}
-		
+
 		content.WriteString(contentStyle.Render(processedContent.String()))
 		content.WriteString("\n")
 	}
-	
+
 	return content.String()
 }

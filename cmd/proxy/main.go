@@ -85,7 +85,7 @@ func startServerOnly(port string, logger *log.Logger) {
 
 	// Create server
 	server := &fasthttp.Server{
-		Handler:                       handler.HandleRequest,
+		Handler:                      handler.HandleRequest,
 		DisablePreParseMultipartForm: true,
 		StreamRequestBody:            true,
 		ReadTimeout:                  30 * time.Second,
@@ -109,15 +109,15 @@ func startServerOnly(port string, logger *log.Logger) {
 // startServerWithInteractiveUI starts the server in background and runs interactive UI
 func startServerWithInteractiveUI(port string, logger *log.Logger) {
 	// Create channels for real-time logging and monitoring
-	logChannel := make(chan proxy.RequestLogEntry, 100)    // Buffer up to 100 log entries
-	monitorChannel := make(chan proxy.MonitorEvent, 200)   // Buffer up to 200 monitor events
-	
+	logChannel := make(chan proxy.RequestLogEntry, 100)  // Buffer up to 100 log entries
+	monitorChannel := make(chan proxy.MonitorEvent, 200) // Buffer up to 200 monitor events
+
 	// Initialize proxy handler with both channels
 	handler := proxy.NewHandlerWithChannels(logger, logChannel, monitorChannel)
-	
+
 	// Create server
 	server := &fasthttp.Server{
-		Handler:                       handler.HandleRequest,
+		Handler:                      handler.HandleRequest,
 		DisablePreParseMultipartForm: true,
 		StreamRequestBody:            true,
 		ReadTimeout:                  30 * time.Second,
@@ -141,9 +141,9 @@ func startServerWithInteractiveUI(port string, logger *log.Logger) {
 
 	// Run interactive application
 	app := NewInteractiveApp(port, logger, logChannel, monitorChannel, handler)
-	
+
 	program := tea.NewProgram(app, tea.WithAltScreen())
-	
+
 	_, err := program.Run()
 	if err != nil {
 		logger.Error("Interactive app error", "error", err)

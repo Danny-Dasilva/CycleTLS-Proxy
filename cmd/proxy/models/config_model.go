@@ -300,12 +300,12 @@ func (m ConfigModel) renderField(field ConfigField, index int, width int) string
 
 	// Wrap the entire field in a bordered container
 	fieldContainer := lipgloss.NewStyle().
-		Width(width - 4). // Leave space for horizontal gap
-		Height(8). // Fixed height for consistent alignment
+		Width(width-4). // Leave space for horizontal gap
+		Height(8).      // Fixed height for consistent alignment
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#61DAFB")).
 		Padding(1, 2). // Internal padding
-		Margin(0, 1) // External margin for spacing
+		Margin(0, 1)   // External margin for spacing
 
 	// Highlight focused field container
 	if index == m.focused {

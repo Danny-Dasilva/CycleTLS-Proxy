@@ -11,11 +11,11 @@ import (
 type BreakpointSize int
 
 const (
-	SizeTiny    BreakpointSize = iota // < 60 chars
-	SizeSmall                         // 60-79 chars
-	SizeMedium                        // 80-119 chars
-	SizeLarge                         // 120-159 chars
-	SizeXLarge                        // 160+ chars
+	SizeTiny   BreakpointSize = iota // < 60 chars
+	SizeSmall                        // 60-79 chars
+	SizeMedium                       // 80-119 chars
+	SizeLarge                        // 120-159 chars
+	SizeXLarge                       // 160+ chars
 )
 
 // GradientLogo renders the CycleTLS logo with gradient effects
@@ -76,7 +76,7 @@ func (g *GradientLogo) RenderTiny() string {
 		Bold(true).
 		Align(lipgloss.Center).
 		Width(g.width)
-	
+
 	return style.Render("◯ CycleTLS ◯")
 }
 
@@ -156,7 +156,7 @@ func (g *GradientLogo) getLargeASCIILogo() string {
           ░░▒▓ Advanced TLS Fingerprint Proxy Server ▓▒░░ `
 }
 
-// getXLargeASCIILogo returns the most detailed logo for extra-large terminals  
+// getXLargeASCIILogo returns the most detailed logo for extra-large terminals
 func (g *GradientLogo) getXLargeASCIILogo() string {
 	return `
    ██████╗██╗   ██╗ ██████╗██╗     ███████╗████████╗██╗     ███████╗
@@ -191,7 +191,7 @@ func (g *GradientLogo) applyCharacterGradient(logo string) string {
 
 	lines := strings.Split(logo, "\n")
 	var gradientLines []string
-	
+
 	// Calculate total visible characters for gradient distribution
 	totalChars := 0
 	for _, line := range lines {
@@ -201,14 +201,14 @@ func (g *GradientLogo) applyCharacterGradient(logo string) string {
 			}
 		}
 	}
-	
+
 	charIndex := 0
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
 			gradientLines = append(gradientLines, line)
 			continue
 		}
-		
+
 		var styledLine strings.Builder
 		for _, char := range line {
 			if char == ' ' || char == '\t' {
@@ -220,19 +220,19 @@ func (g *GradientLogo) applyCharacterGradient(logo string) string {
 				if colorIndex >= len(gradientColors) {
 					colorIndex = len(gradientColors) - 1
 				}
-				
+
 				style := lipgloss.NewStyle().
 					Foreground(gradientColors[colorIndex]).
 					Bold(true)
-				
+
 				styledLine.WriteString(style.Render(string(char)))
 				charIndex++
 			}
 		}
-		
+
 		gradientLines = append(gradientLines, styledLine.String())
 	}
-	
+
 	// Center the logo if width is available
 	if g.width > 0 {
 		centerStyle := lipgloss.NewStyle().
@@ -240,7 +240,7 @@ func (g *GradientLogo) applyCharacterGradient(logo string) string {
 			Width(g.width)
 		return centerStyle.Render(strings.Join(gradientLines, "\n"))
 	}
-	
+
 	return strings.Join(gradientLines, "\n")
 }
 
@@ -253,12 +253,12 @@ func (g *GradientLogo) applyGradientToLogo(logo string) string {
 // RenderWithSubtitle adds a subtitle below the logo
 func (g *GradientLogo) RenderWithSubtitle(subtitle string) string {
 	logo := g.Render()
-	
+
 	// subtitleStyle := lipgloss.NewStyle().
 	// 	Foreground(lipgloss.Color("#9CA3AF")).
 	// 	Align(lipgloss.Center).
 	// 	Width(g.width).
 	// 	MarginTop(1)
-	
-	return logo + "\n" 
+
+	return logo + "\n"
 }

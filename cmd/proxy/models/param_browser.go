@@ -17,14 +17,14 @@ import (
 
 // Parameter represents a configurable parameter
 type Parameter struct {
-	Name           string
-	Required       bool
-	Desc           string
-	Example        string
-	CurlExample    string
-	Category       string
-	Complexity     string // "green", "yellow", "blue"
-	ComplexityLevel int   // 1=green, 2=yellow, 3=blue
+	Name            string
+	Required        bool
+	Desc            string
+	Example         string
+	CurlExample     string
+	Category        string
+	Complexity      string // "green", "yellow", "blue"
+	ComplexityLevel int    // 1=green, 2=yellow, 3=blue
 }
 
 // FilterValue implements list.Item interface
@@ -40,7 +40,7 @@ func (p Parameter) Title() string {
 	return fmt.Sprintf("🔹 %s", p.Name)
 }
 
-// Description returns the parameter description for list display  
+// Description returns the parameter description for list display
 func (p Parameter) Description() string {
 	var complexityIcon string
 	switch p.Complexity {
@@ -62,7 +62,7 @@ type ParamBrowserModel struct {
 	viewport   viewport.Model
 	width      int
 	height     int
-	focused    int    // 0 = list, 1 = viewport
+	focused    int // 0 = list, 1 = viewport
 	port       string
 	ready      bool
 	statusMsg  string // Status message for user feedback
@@ -75,149 +75,149 @@ func NewParamBrowserModel(port string) ParamBrowserModel {
 	parameters := []list.Item{
 		// Required proxy headers
 		Parameter{
-			Name:        "X-URL",
-			Required:    true,
-			Desc: "Target URL to proxy the request to",
-			Example:     "https://httpbin.org/ip",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" http://localhost:%s`, port),
-			Category:    "Required",
-			Complexity:     "green",
+			Name:            "X-URL",
+			Required:        true,
+			Desc:            "Target URL to proxy the request to",
+			Example:         "https://httpbin.org/ip",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" http://localhost:%s`, port),
+			Category:        "Required",
+			Complexity:      "green",
 			ComplexityLevel: 1,
 		},
-		
+
 		// Basic proxy headers
 		Parameter{
-			Name:        "X-IDENTIFIER",
-			Required:    false,
-			Desc: "Browser profile for TLS fingerprinting",
-			Example:     "chrome, firefox, safari, edge",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-IDENTIFIER: firefox" http://localhost:%s`, port),
-			Category:    "Basic",
-			Complexity:     "green",
+			Name:            "X-IDENTIFIER",
+			Required:        false,
+			Desc:            "Browser profile for TLS fingerprinting",
+			Example:         "chrome, firefox, safari, edge",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-IDENTIFIER: firefox" http://localhost:%s`, port),
+			Category:        "Basic",
+			Complexity:      "green",
 			ComplexityLevel: 1,
 		},
 		Parameter{
-			Name:        "X-SESSION-ID",
-			Required:    false,
-			Desc: "Session identifier for connection reuse",
-			Example:     "my-session-123",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://api.example.com" -H "X-SESSION-ID: my-session-123" http://localhost:%s`, port),
-			Category:    "Basic",
-			Complexity:     "green",
+			Name:            "X-SESSION-ID",
+			Required:        false,
+			Desc:            "Session identifier for connection reuse",
+			Example:         "my-session-123",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://api.example.com" -H "X-SESSION-ID: my-session-123" http://localhost:%s`, port),
+			Category:        "Basic",
+			Complexity:      "green",
 			ComplexityLevel: 1,
 		},
 		Parameter{
-			Name:        "X-TIMEOUT",
-			Required:    false,
-			Desc: "Custom timeout in seconds (1-300)",
-			Example:     "30",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/delay/10" -H "X-TIMEOUT: 15" http://localhost:%s`, port),
-			Category:    "Basic",
-			Complexity:     "green",
+			Name:            "X-TIMEOUT",
+			Required:        false,
+			Desc:            "Custom timeout in seconds (1-300)",
+			Example:         "30",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/delay/10" -H "X-TIMEOUT: 15" http://localhost:%s`, port),
+			Category:        "Basic",
+			Complexity:      "green",
 			ComplexityLevel: 1,
 		},
 		Parameter{
-			Name:        "X-PROXY",
-			Required:    false,
-			Desc: "Upstream proxy server configuration",
-			Example:     "http://user:pass@proxy.example.com:8080",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-PROXY: http://user:pass@proxy:8080" http://localhost:%s`, port),
-			Category:    "Basic",
-			Complexity:     "yellow",
+			Name:            "X-PROXY",
+			Required:        false,
+			Desc:            "Upstream proxy server configuration",
+			Example:         "http://user:pass@proxy.example.com:8080",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-PROXY: http://user:pass@proxy:8080" http://localhost:%s`, port),
+			Category:        "Basic",
+			Complexity:      "yellow",
 			ComplexityLevel: 2,
 		},
-		
+
 		// Advanced TLS parameters
 		Parameter{
-			Name:        "X-JA3",
-			Required:    false,
-			Desc: "Custom JA3 TLS fingerprint string",
-			Example:     "771,4865-4867-4866-49195-49199...",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-JA3: 771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53" http://localhost:%s`, port),
-			Category:    "Advanced TLS",
-			Complexity:     "blue",
+			Name:            "X-JA3",
+			Required:        false,
+			Desc:            "Custom JA3 TLS fingerprint string",
+			Example:         "771,4865-4867-4866-49195-49199...",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-JA3: 771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53" http://localhost:%s`, port),
+			Category:        "Advanced TLS",
+			Complexity:      "blue",
 			ComplexityLevel: 3,
 		},
 		Parameter{
-			Name:        "X-JA4",
-			Required:    false,
-			Desc: "JA4 enhanced TLS fingerprinting token",
-			Example:     "t13d1516h2_8daaf6152771_02713d6af862",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-JA4: t13d1516h2_8daaf6152771_02713d6af862" http://localhost:%s`, port),
-			Category:    "Advanced TLS",
-			Complexity:     "blue",
+			Name:            "X-JA4",
+			Required:        false,
+			Desc:            "JA4 enhanced TLS fingerprinting token",
+			Example:         "t13d1516h2_8daaf6152771_02713d6af862",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-JA4: t13d1516h2_8daaf6152771_02713d6af862" http://localhost:%s`, port),
+			Category:        "Advanced TLS",
+			Complexity:      "blue",
 			ComplexityLevel: 3,
 		},
 		Parameter{
-			Name:        "X-HTTP2-FINGERPRINT",
-			Required:    false,
-			Desc: "HTTP/2 specific fingerprint for connection settings",
-			Example:     "1:65536;2:0;4:131072;5:16384|15663105|0|m,a,s,p",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-HTTP2-FINGERPRINT: 1:65536;2:0;4:131072;5:16384|15663105|0|m,a,s,p" http://localhost:%s`, port),
-			Category:    "Advanced TLS",
-			Complexity:     "blue",
+			Name:            "X-HTTP2-FINGERPRINT",
+			Required:        false,
+			Desc:            "HTTP/2 specific fingerprint for connection settings",
+			Example:         "1:65536;2:0;4:131072;5:16384|15663105|0|m,a,s,p",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-HTTP2-FINGERPRINT: 1:65536;2:0;4:131072;5:16384|15663105|0|m,a,s,p" http://localhost:%s`, port),
+			Category:        "Advanced TLS",
+			Complexity:      "blue",
 			ComplexityLevel: 3,
 		},
 		Parameter{
-			Name:        "X-USER-AGENT",
-			Required:    false,
-			Desc: "Custom user agent string override",
-			Example:     "Mozilla/5.0 (Windows NT 10.0; Win64; x64)...",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/user-agent" -H "X-USER-AGENT: Mozilla/5.0 (custom)" http://localhost:%s`, port),
-			Category:    "Advanced TLS",
-			Complexity:     "yellow",
+			Name:            "X-USER-AGENT",
+			Required:        false,
+			Desc:            "Custom user agent string override",
+			Example:         "Mozilla/5.0 (Windows NT 10.0; Win64; x64)...",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/user-agent" -H "X-USER-AGENT: Mozilla/5.0 (custom)" http://localhost:%s`, port),
+			Category:        "Advanced TLS",
+			Complexity:      "yellow",
 			ComplexityLevel: 2,
 		},
-		
+
 		// Connection control
 		Parameter{
-			Name:        "X-HEADER-ORDER",
-			Required:    false,
-			Desc: "Custom header ordering for fingerprinting",
-			Example:     "accept,user-agent,accept-encoding,accept-language",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/headers" -H "X-HEADER-ORDER: accept,user-agent,accept-encoding" http://localhost:%s`, port),
-			Category:    "Connection",
-			Complexity:     "blue",
+			Name:            "X-HEADER-ORDER",
+			Required:        false,
+			Desc:            "Custom header ordering for fingerprinting",
+			Example:         "accept,user-agent,accept-encoding,accept-language",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/headers" -H "X-HEADER-ORDER: accept,user-agent,accept-encoding" http://localhost:%s`, port),
+			Category:        "Connection",
+			Complexity:      "blue",
 			ComplexityLevel: 3,
 		},
 		Parameter{
-			Name:        "X-INSECURE",
-			Required:    false,
-			Desc: "Skip TLS certificate verification",
-			Example:     "true",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://self-signed.badssl.com" -H "X-INSECURE: true" http://localhost:%s`, port),
-			Category:    "Connection",
-			Complexity:     "yellow",
+			Name:            "X-INSECURE",
+			Required:        false,
+			Desc:            "Skip TLS certificate verification",
+			Example:         "true",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://self-signed.badssl.com" -H "X-INSECURE: true" http://localhost:%s`, port),
+			Category:        "Connection",
+			Complexity:      "yellow",
 			ComplexityLevel: 2,
 		},
 		Parameter{
-			Name:        "X-FORCE-HTTP1",
-			Required:    false,
-			Desc: "Force HTTP/1.1 protocol usage",
-			Example:     "true",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-FORCE-HTTP1: true" http://localhost:%s`, port),
-			Category:    "Connection",
-			Complexity:     "yellow",
+			Name:            "X-FORCE-HTTP1",
+			Required:        false,
+			Desc:            "Force HTTP/1.1 protocol usage",
+			Example:         "true",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-FORCE-HTTP1: true" http://localhost:%s`, port),
+			Category:        "Connection",
+			Complexity:      "yellow",
 			ComplexityLevel: 2,
 		},
 		Parameter{
-			Name:        "X-FORCE-HTTP3",
-			Required:    false,
-			Desc: "Force HTTP/3/QUIC protocol usage",
-			Example:     "true",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-FORCE-HTTP3: true" http://localhost:%s`, port),
-			Category:    "Connection",
-			Complexity:     "yellow",
+			Name:            "X-FORCE-HTTP3",
+			Required:        false,
+			Desc:            "Force HTTP/3/QUIC protocol usage",
+			Example:         "true",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-FORCE-HTTP3: true" http://localhost:%s`, port),
+			Category:        "Connection",
+			Complexity:      "yellow",
 			ComplexityLevel: 2,
 		},
 		Parameter{
-			Name:        "X-ENABLE-CONNECTION-REUSE",
-			Required:    false,
-			Desc: "Enable TCP connection reuse for performance",
-			Example:     "true",
-			CurlExample: fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-ENABLE-CONNECTION-REUSE: true" http://localhost:%s`, port),
-			Category:    "Connection",
-			Complexity:     "yellow",
+			Name:            "X-ENABLE-CONNECTION-REUSE",
+			Required:        false,
+			Desc:            "Enable TCP connection reuse for performance",
+			Example:         "true",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-ENABLE-CONNECTION-REUSE: true" http://localhost:%s`, port),
+			Category:        "Connection",
+			Complexity:      "yellow",
 			ComplexityLevel: 2,
 		},
 	}
@@ -237,7 +237,7 @@ func NewParamBrowserModel(port string) ParamBrowserModel {
 	paramList.SetShowStatusBar(false)
 	paramList.SetFilteringEnabled(true)
 	paramList.SetShowTitle(true) // Explicitly ensure title is always shown
-	paramList.Title = "⚙️ Parameters\n🟢 Basic  🟡 Intermediate  🔵 Advanced"
+	paramList.Title = "📋 Parameters\n🟢 Basic  🟡 Intermediate  🔵 Advanced"
 
 	return ParamBrowserModel{
 		list: paramList,
@@ -265,7 +265,7 @@ func (m ParamBrowserModel) Update(msg tea.Msg) (ParamBrowserModel, tea.Cmd) {
 			var cmd tea.Cmd
 			m.list, cmd = m.list.Update(msg)
 			cmds = append(cmds, cmd)
-			
+
 			// Update viewport content when mouse interaction changes selection
 			m.viewport.SetContent(m.getDetailContent())
 		} else if m.ready && m.focused == 1 {
@@ -274,22 +274,20 @@ func (m ParamBrowserModel) Update(msg tea.Msg) (ParamBrowserModel, tea.Cmd) {
 			m.viewport, cmd = m.viewport.Update(msg)
 			cmds = append(cmds, cmd)
 		}
-		
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		
-		// Calculate panel dimensions (match View method calculations)
-		footerHeight := 2
-		availableHeight := msg.Height - footerHeight - 1
-		panelHeight := availableHeight
-		if panelHeight < 25 {
-			panelHeight = 25
+
+		// Simple height calculation (match View method)
+		panelHeight := msg.Height - 8
+		if panelHeight < 20 {
+			panelHeight = 20
 		}
-		
+
 		leftWidth := (msg.Width - 6) / 2
 		rightWidth := msg.Width - leftWidth - 4
-		
+
 		// Ensure minimum dimensions
 		if leftWidth < 30 {
 			leftWidth = 30
@@ -297,10 +295,10 @@ func (m ParamBrowserModel) Update(msg tea.Msg) (ParamBrowserModel, tea.Cmd) {
 		if rightWidth < 40 {
 			rightWidth = 40
 		}
-		
+
 		// Update list dimensions
 		m.list.SetSize(leftWidth, panelHeight)
-		
+
 		// Initialize or update viewport
 		if !m.ready {
 			m.viewport = viewport.New(rightWidth, panelHeight)
@@ -315,29 +313,27 @@ func (m ParamBrowserModel) Update(msg tea.Msg) (ParamBrowserModel, tea.Cmd) {
 	case tea.KeyMsg:
 		// Initialize on first key press if not ready
 		if !m.ready && m.width > 0 && m.height > 0 {
-			footerHeight := 2
-			availableHeight := m.height - footerHeight - 1
-			panelHeight := availableHeight
-			if panelHeight < 25 {
-				panelHeight = 25
+			panelHeight := m.height - 8
+			if panelHeight < 20 {
+				panelHeight = 20
 			}
-			
+
 			leftWidth := (m.width - 6) / 2
 			rightWidth := m.width - leftWidth - 4
-			
+
 			if leftWidth < 30 {
 				leftWidth = 30
 			}
 			if rightWidth < 40 {
 				rightWidth = 40
 			}
-			
+
 			m.viewport = viewport.New(rightWidth, panelHeight)
 			m.viewport.SetContent(m.getDetailContent())
 			m.list.SetSize(leftWidth, panelHeight)
 			m.ready = true
 		}
-		
+
 		// Handle non-navigation keys first that shouldn't be forwarded
 		switch msg.String() {
 		case "tab":
@@ -365,19 +361,19 @@ func (m ParamBrowserModel) Update(msg tea.Msg) (ParamBrowserModel, tea.Cmd) {
 		if !m.ready {
 			return m, nil
 		}
-		
+
 		if m.focused == 0 {
 			// Forward to list (handles up/down/navigation)
 			var cmd tea.Cmd
 			m.list, cmd = m.list.Update(msg)
 			cmds = append(cmds, cmd)
-			
+
 			// Update viewport content when selection might have changed
 			// Check for any navigation or selection keys
 			key := msg.String()
-			if key == "up" || key == "down" || key == "j" || key == "k" || 
-			   key == "enter" || key == "pgup" || key == "pgdown" ||
-			   key == "home" || key == "end" {
+			if key == "up" || key == "down" || key == "j" || key == "k" ||
+				key == "enter" || key == "pgup" || key == "pgdown" ||
+				key == "home" || key == "end" {
 				m.viewport.SetContent(m.getDetailContent())
 			}
 		} else {
@@ -402,7 +398,7 @@ func (m ParamBrowserModel) View() string {
 	if m.width == 0 {
 		return "Initializing parameter browser..."
 	}
-	
+
 	// If not ready, show a simple layout
 	if !m.ready {
 		return lipgloss.NewStyle().
@@ -414,25 +410,20 @@ func (m ParamBrowserModel) View() string {
 
 	// Build the complete view
 	var parts []string
-	
-	// Calculate panel height (give list component more space)
-	// Footer: help text + minimal margin = 2 lines
-	footerHeight := 2
-	
-	// Calculate available height for panels with minimal spacing overhead
-	availableHeight := m.height - footerHeight - 1 // 1 for minimal spacing
-	panelHeight := availableHeight
-	
-	// Ensure sufficient height for list title + content visibility
-	if panelHeight < 25 {
-		panelHeight = 25
+
+	// Simple height calculation to restore border visibility
+	panelHeight := m.height - 8 // Simple approach that worked before
+
+	// Find sweet spot for legend visibility without breaking borders
+	if panelHeight < 20 {
+		panelHeight = 20
 	}
-	
+
 	// Calculate panel dimensions with proper border accounting
 	// Total overhead: borders (4 chars) + gap (2 chars) = 6 chars
 	leftPanelWidth := (m.width - 6) / 2
 	rightPanelWidth := m.width - leftPanelWidth - 4 // Precise remainder calculation
-	
+
 	// Ensure minimum widths
 	if leftPanelWidth < 30 {
 		leftPanelWidth = 30
@@ -440,7 +431,7 @@ func (m ParamBrowserModel) View() string {
 	if rightPanelWidth < 40 {
 		rightPanelWidth = 40
 	}
-	
+
 	// Create panel styles with proper borders
 	leftStyle := lipgloss.NewStyle().
 		Width(leftPanelWidth).
@@ -448,33 +439,33 @@ func (m ParamBrowserModel) View() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.BorderUnfocused).
 		Padding(1)
-	
+
 	rightStyle := lipgloss.NewStyle().
 		Width(rightPanelWidth).
 		Height(panelHeight).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.BorderUnfocused).
 		Padding(1)
-	
+
 	// Apply focus styling
 	if m.focused == 0 {
 		leftStyle = leftStyle.BorderForeground(styles.BorderFocused)
 	} else {
 		rightStyle = rightStyle.BorderForeground(styles.BorderFocused)
 	}
-	
+
 	// Render panels
 	leftPanel := leftStyle.Render(m.list.View())
 	rightPanel := rightStyle.Render(m.renderDetailView())
-	
+
 	// Join panels horizontally
 	content := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
 	parts = append(parts, content)
-	
+
 	// Footer with top spacing
 	footer := m.renderFooter()
 	parts = append(parts, footer)
-	
+
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
@@ -487,18 +478,18 @@ func (m ParamBrowserModel) renderHeader() string {
 		Align(lipgloss.Center).
 		Width(m.width).
 		MarginBottom(1)
-	
+
 	title := titleStyle.Render("⚙️ Parameter Browser - Configure your CycleTLS requests")
-	
+
 	// Complexity legend
 	complexityStyle := lipgloss.NewStyle().
 		Foreground(styles.TextMuted).
 		Align(lipgloss.Center).
 		Width(m.width).
 		MarginBottom(2)
-	
+
 	complexityLegend := complexityStyle.Render("🟢 Basic  🟡 Intermediate  🔵 Advanced")
-	
+
 	return lipgloss.JoinVertical(lipgloss.Left, title, complexityLegend)
 }
 
@@ -511,30 +502,30 @@ func (m ParamBrowserModel) renderFooter() string {
 			Foreground(styles.AccentGreen)
 		return statusStyle.Render(m.statusMsg)
 	}
-	
+
 	var keys []string
-	
+
 	if m.focused == 0 {
-		keys = append(keys, 
+		keys = append(keys,
 			styles.KeyStyle("↑/↓")+"Navigate",
 			styles.KeyStyle("tab")+"Switch panels",
 			styles.KeyStyle("/")+"Filter",
 			styles.KeyStyle("c")+"Copy example",
 		)
 	} else {
-		keys = append(keys, 
+		keys = append(keys,
 			styles.KeyStyle("↑/↓")+"Scroll",
 			styles.KeyStyle("tab")+"Switch panels",
 		)
 	}
-	
-	keys = append(keys, 
+
+	keys = append(keys,
 		styles.KeyStyle("esc")+"Back to menu",
 	)
-	
+
 	footerStyle := styles.StatusBarStyle(m.width).
 		MarginTop(1)
-	
+
 	return footerStyle.Render(strings.Join(keys, " • "))
 }
 
@@ -556,7 +547,7 @@ func (m ParamBrowserModel) getDetailContent() string {
 	}
 
 	var content strings.Builder
-	
+
 	// Parameter name with status
 	nameStyle := styles.HeaderStyle
 	if param.Required {
@@ -567,7 +558,7 @@ func (m ParamBrowserModel) getDetailContent() string {
 		content.WriteString(nameStyle.Render(fmt.Sprintf("%s (optional)", param.Name)))
 	}
 	content.WriteString("\n\n")
-	
+
 	// Complexity indicator
 	var complexityText, complexityIcon string
 	switch param.Complexity {
@@ -584,49 +575,49 @@ func (m ParamBrowserModel) getDetailContent() string {
 		complexityIcon = "⚪"
 		complexityText = "Unknown"
 	}
-	
+
 	complexityStyle := styles.InfoStyle.MarginBottom(1)
 	content.WriteString(complexityStyle.Render(fmt.Sprintf("🏷️ Complexity: %s %s", complexityIcon, complexityText)))
 	content.WriteString("\n\n")
-	
+
 	// Description
 	descStyle := styles.ContentStyle
 	content.WriteString(descStyle.Render(param.Desc))
 	content.WriteString("\n\n")
-	
+
 	// Example value
 	if param.Example != "" {
 		exampleHeaderStyle := styles.WarningStyle
 		content.WriteString(exampleHeaderStyle.Render("📝 Example Value:"))
 		content.WriteString("\n")
-		
+
 		exampleStyle := styles.CodeStyle.MarginLeft(0)
 		content.WriteString(exampleStyle.Render(param.Example))
 		content.WriteString("\n\n")
 	}
-	
+
 	// Curl example
 	if param.CurlExample != "" {
 		curlHeaderStyle := styles.SuccessStyle
 		content.WriteString(curlHeaderStyle.Render("💻 Example Usage:"))
 		content.WriteString("\n")
-		
+
 		// Format curl command like in profile browser
 		curlStyle := styles.CodeStyle.
 			Background(lipgloss.Color("#2D3748")).
 			Padding(1).
 			MarginTop(1).
 			Width(m.viewport.Width - 4)
-		
+
 		// Format with backslash continuation for readability
 		formattedCmd := m.formatCurlCommand(param.CurlExample)
 		content.WriteString(curlStyle.Render(formattedCmd))
 		content.WriteString("\n\n")
 	}
-	
+
 	// Usage notes based on parameter type
 	content.WriteString(m.getUsageNotes(param))
-	
+
 	return content.String()
 }
 
@@ -638,25 +629,25 @@ func (m ParamBrowserModel) formatCurlCommand(curlCmd string) string {
 		// No headers, return as is
 		return curlCmd
 	}
-	
+
 	// Format with backslash continuation
 	var result strings.Builder
 	result.WriteString(parts[0])
-	
+
 	for i := 1; i < len(parts); i++ {
 		result.WriteString(" \\\n     -H ")
 		result.WriteString(parts[i])
 	}
-	
+
 	return result.String()
 }
 
 // getUsageNotes provides parameter-specific usage guidance
 func (m ParamBrowserModel) getUsageNotes(param Parameter) string {
 	var notes strings.Builder
-	
+
 	noteStyle := styles.ContentStyle.Foreground(styles.TextMuted)
-	
+
 	switch param.Name {
 	case "X-URL":
 		notes.WriteString(noteStyle.Render("💬 This parameter is required for all requests. Must be a valid HTTP/HTTPS URL."))
@@ -689,7 +680,7 @@ func (m ParamBrowserModel) getUsageNotes(param Parameter) string {
 	default:
 		notes.WriteString(noteStyle.Render("💬 This parameter modifies the TLS/HTTP behavior of your requests."))
 	}
-	
+
 	return notes.String()
 }
 

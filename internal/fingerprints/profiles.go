@@ -13,22 +13,22 @@ import (
 type Profile struct {
 	// JA3 is the JA3 TLS fingerprint string
 	JA3 string `json:"ja3"`
-	
+
 	// JA4 is the JA4 TLS fingerprint string (newer standard)
 	JA4 string `json:"ja4"`
-	
+
 	// UserAgent is the HTTP User-Agent header string
 	UserAgent string `json:"user_agent"`
-	
+
 	// HTTPVersion specifies the preferred HTTP version (e.g., "h2", "http/1.1")
 	HTTPVersion string `json:"http_version"`
-	
+
 	// TLSVersion specifies the TLS version (e.g., "1.3", "1.2")
 	TLSVersion string `json:"tls_version"`
-	
+
 	// Description provides human-readable information about the profile
 	Description string `json:"description"`
-	
+
 	// Platform indicates the operating system/platform (e.g., "Windows", "macOS", "Linux", "iOS", "Android")
 	Platform string `json:"platform"`
 }
@@ -150,7 +150,7 @@ func ValidateProfile(identifier string) bool {
 func GetProfilesByPlatform(platform string) map[string]Profile {
 	allProfiles := GetDefaultProfiles()
 	platformProfiles := make(map[string]Profile)
-	
+
 	for id, profile := range allProfiles {
 		if profile.Platform == platform {
 			platformProfiles[id] = profile
@@ -163,11 +163,11 @@ func GetProfilesByPlatform(platform string) map[string]Profile {
 func GetPlatforms() []string {
 	profiles := GetDefaultProfiles()
 	platformSet := make(map[string]bool)
-	
+
 	for _, profile := range profiles {
 		platformSet[profile.Platform] = true
 	}
-	
+
 	platforms := make([]string, 0, len(platformSet))
 	for platform := range platformSet {
 		platforms = append(platforms, platform)
@@ -178,7 +178,7 @@ func GetPlatforms() []string {
 
 // ProfileInfo returns formatted information about a profile.
 func (p *Profile) String() string {
-	return fmt.Sprintf("%s (%s) - TLS %s, %s", 
+	return fmt.Sprintf("%s (%s) - TLS %s, %s",
 		p.Description, p.Platform, p.TLSVersion, p.HTTPVersion)
 }
 

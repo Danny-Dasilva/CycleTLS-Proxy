@@ -50,10 +50,10 @@ const (
 
 // Custom error types
 var (
-	ErrCycleTLS             = errors.New("cycletls error")
-	ErrCycleTLSTimeout      = errors.New("cycletls timeout")
+	ErrCycleTLS               = errors.New("cycletls error")
+	ErrCycleTLSTimeout        = errors.New("cycletls timeout")
 	ErrCycleTLSInvalidProfile = errors.New("cycletls invalid profile")
-	ErrCycleTLSConnection   = errors.New("cycletls connection error")
+	ErrCycleTLSConnection     = errors.New("cycletls connection error")
 )
 
 // CycleTLSError wraps errors with additional context
@@ -210,7 +210,7 @@ func (c *CycleTLSClient) handleError(resp *http.Response, err error) error {
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
 		message := string(body)
-		
+
 		switch resp.StatusCode {
 		case 400:
 			if strings.Contains(message, "Invalid identifier") {
@@ -290,7 +290,7 @@ func (c *CycleTLSClient) Request(method, targetURL string, body io.Reader, optio
 	// Update client timeout if needed
 	if config.Timeout != c.defaultTimeout {
 		client := &http.Client{
-			Timeout: time.Duration(config.Timeout+5) * time.Second,
+			Timeout:       time.Duration(config.Timeout+5) * time.Second,
 			CheckRedirect: c.httpClient.CheckRedirect,
 		}
 		resp, err := client.Do(req)
@@ -414,7 +414,7 @@ func (c *CycleTLSClient) NewSession(sessionID string) *SessionContext {
 	if sessionID == "" {
 		sessionID = fmt.Sprintf("go-session-%s", uuid.New().String()[:8])
 	}
-	
+
 	return &SessionContext{
 		client:    c,
 		sessionID: sessionID,
@@ -568,7 +568,7 @@ func runBasicExamples() {
 
 	// PUT request
 	putData := "Updated content"
-	resp, err = client.Put("https://httpbin.org/put", 
+	resp, err = client.Put("https://httpbin.org/put",
 		strings.NewReader(putData),
 		WithProfile(ProfileFirefox),
 		WithHeader("Content-Type", "text/plain"))

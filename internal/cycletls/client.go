@@ -9,22 +9,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 	"github.com/Danny-Dasilva/CycleTLS-Proxy/internal/fingerprints"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 	"github.com/charmbracelet/log"
 )
 
 // Client wraps the CycleTLS client with enhanced functionality including
 // session management, timeout handling, and connection reuse capabilities.
 type Client struct {
-	underlying    *cycletls.CycleTLS
-	sessionID     string
-	createdAt     time.Time
-	lastUsedAt    time.Time
-	requestCount  int
-	mu            sync.RWMutex // protects concurrent access to client state
-	closed        bool
-	logger        *log.Logger
+	underlying   *cycletls.CycleTLS
+	sessionID    string
+	createdAt    time.Time
+	lastUsedAt   time.Time
+	requestCount int
+	mu           sync.RWMutex // protects concurrent access to client state
+	closed       bool
+	logger       *log.Logger
 }
 
 // NewClient creates a new CycleTLS client wrapper with session management capabilities.
@@ -32,7 +32,7 @@ type Client struct {
 func NewClient(sessionID string) *Client {
 	client := cycletls.Init()
 	now := time.Now()
-	
+
 	return &Client{
 		underlying:   &client,
 		sessionID:    sessionID,
@@ -63,12 +63,12 @@ func (c *Client) Do(url string, options cycletls.Options, method string) (cyclet
 	c.requestCount++
 	requestNum := c.requestCount
 	c.mu.Unlock()
-	
+
 	// Set default timeout if not specified
 	if options.Timeout == 0 {
 		options.Timeout = 30 // Default 30 seconds
 	}
-	
+
 	// Log request for debugging
 	c.logger.Debug("Making request",
 		"session_id", c.sessionID,
@@ -78,11 +78,11 @@ func (c *Client) Do(url string, options cycletls.Options, method string) (cyclet
 		"timeout", options.Timeout,
 		"has_proxy", options.Proxy != "",
 	)
-	
+
 	start := time.Now()
 	response, err := c.underlying.Do(url, options, method)
 	duration := time.Since(start)
-	
+
 	if err != nil {
 		c.logger.Debug("Request failed",
 			"session_id", c.sessionID,
@@ -92,7 +92,7 @@ func (c *Client) Do(url string, options cycletls.Options, method string) (cyclet
 		)
 		return response, fmt.Errorf("request failed: %w", err)
 	}
-	
+
 	c.logger.Debug("Request completed",
 		"session_id", c.sessionID,
 		"request_num", requestNum,
@@ -100,7 +100,7 @@ func (c *Client) Do(url string, options cycletls.Options, method string) (cyclet
 		"duration_ms", duration.Milliseconds(),
 		"response_size", len(response.Body),
 	)
-	
+
 	return response, nil
 }
 
@@ -201,17 +201,17 @@ func (c *Client) SetLogger(logger *log.Logger) {
 func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if c.closed {
 		return nil // Already closed
 	}
-	
+
 	c.logger.Debug("Closing client",
 		"session_id", c.sessionID,
 		"age_seconds", time.Since(c.createdAt).Seconds(),
 		"request_count", c.requestCount,
 	)
-	
+
 	c.underlying.Close()
 	c.closed = true
 	return nil
@@ -219,20 +219,20 @@ func (c *Client) Close() error {
 
 // ClientConfig holds configuration for client creation and management
 type ClientConfig struct {
-	DefaultTimeout    time.Duration
-	MaxIdleTime       time.Duration
-	CleanupInterval   time.Duration
-	MaxSessionAge     time.Duration
-	EnableCleanup     bool
-	Logger            *log.Logger
+	DefaultTimeout  time.Duration
+	MaxIdleTime     time.Duration
+	CleanupInterval time.Duration
+	MaxSessionAge   time.Duration
+	EnableCleanup   bool
+	Logger          *log.Logger
 }
 
 // DefaultClientConfig returns a ClientConfig with sensible defaults
 func DefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
 		DefaultTimeout:  30 * time.Second,
-		MaxIdleTime:     300 * time.Second, // 5 minutes
-		CleanupInterval: 60 * time.Second,  // 1 minute
+		MaxIdleTime:     300 * time.Second,  // 5 minutes
+		CleanupInterval: 60 * time.Second,   // 1 minute
 		MaxSessionAge:   3600 * time.Second, // 1 hour
 		EnableCleanup:   true,
 		Logger:          log.New(nil),
@@ -262,12 +262,12 @@ func NewClientManagerWithConfig(config *ClientConfig) *ClientManager {
 		cleanupStop: make(chan bool),
 		closed:      false,
 	}
-	
+
 	// Start cleanup goroutine if enabled
 	if config.EnableCleanup {
 		go cm.cleanupRoutine()
 	}
-	
+
 	return cm
 }
 
@@ -275,7 +275,7 @@ func NewClientManagerWithConfig(config *ClientConfig) *ClientManager {
 func (cm *ClientManager) cleanupRoutine() {
 	ticker := time.NewTicker(cm.config.CleanupInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -290,27 +290,27 @@ func (cm *ClientManager) cleanupRoutine() {
 func (cm *ClientManager) performCleanup() {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	
+
 	if cm.closed {
 		return
 	}
-	
+
 	var toRemove []string
 	now := time.Now()
-	
+
 	for sessionID, client := range cm.clients {
 		// Remove clients that are too old or have been idle too long
 		if client.GetAge() > cm.config.MaxSessionAge || client.IsIdle(cm.config.MaxIdleTime) {
 			toRemove = append(toRemove, sessionID)
 		}
 	}
-	
+
 	// Clean up identified clients
 	for _, sessionID := range toRemove {
 		client := cm.clients[sessionID]
 		client.Close()
 		delete(cm.clients, sessionID)
-		
+
 		cm.config.Logger.Debug("Cleaned up idle session",
 			"session_id", sessionID,
 			"age_seconds", client.GetAge().Seconds(),
@@ -318,7 +318,7 @@ func (cm *ClientManager) performCleanup() {
 			"request_count", client.GetRequestCount(),
 		)
 	}
-	
+
 	if len(toRemove) > 0 {
 		cm.config.Logger.Info("Cleanup completed",
 			"removed_sessions", len(toRemove),
@@ -332,12 +332,12 @@ func (cm *ClientManager) performCleanup() {
 func (cm *ClientManager) GetClient(sessionID string) *Client {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	
+
 	if cm.closed {
 		// Return a temporary client if manager is closed
 		return NewClientWithLogger("", cm.config.Logger)
 	}
-	
+
 	// Return temporary client for empty session ID
 	if sessionID == "" {
 		return NewClientWithLogger("", cm.config.Logger)
@@ -352,12 +352,12 @@ func (cm *ClientManager) GetClient(sessionID string) *Client {
 	// Create new client
 	client := NewClientWithLogger(sessionID, cm.config.Logger)
 	cm.clients[sessionID] = client
-	
-	cm.config.Logger.Debug("Created new session", 
-		"session_id", sessionID, 
+
+	cm.config.Logger.Debug("Created new session",
+		"session_id", sessionID,
 		"total_sessions", len(cm.clients),
 	)
-	
+
 	return client
 }
 
@@ -373,12 +373,12 @@ func (cm *ClientManager) GetClientWithProfile(sessionID string, profile fingerpr
 func (cm *ClientManager) RemoveClient(sessionID string) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	
+
 	if client, exists := cm.clients[sessionID]; exists {
 		client.Close()
 		delete(cm.clients, sessionID)
-		
-		cm.config.Logger.Debug("Removed session", 
+
+		cm.config.Logger.Debug("Removed session",
 			"session_id", sessionID,
 			"remaining_sessions", len(cm.clients),
 		)
@@ -389,7 +389,7 @@ func (cm *ClientManager) RemoveClient(sessionID string) {
 func (cm *ClientManager) RemoveIdleClients(idleDuration time.Duration) int {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	
+
 	var removed []string
 	for sessionID, client := range cm.clients {
 		if client.IsIdle(idleDuration) {
@@ -397,19 +397,19 @@ func (cm *ClientManager) RemoveIdleClients(idleDuration time.Duration) int {
 			removed = append(removed, sessionID)
 		}
 	}
-	
+
 	for _, sessionID := range removed {
 		delete(cm.clients, sessionID)
 	}
-	
+
 	if len(removed) > 0 {
-		cm.config.Logger.Info("Removed idle clients", 
+		cm.config.Logger.Info("Removed idle clients",
 			"count", len(removed),
 			"idle_duration", idleDuration,
 			"remaining_sessions", len(cm.clients),
 		)
 	}
-	
+
 	return len(removed)
 }
 
@@ -424,7 +424,7 @@ func (cm *ClientManager) GetActiveSessionsCount() int {
 func (cm *ClientManager) GetSessionIDs() []string {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	
+
 	ids := make([]string, 0, len(cm.clients))
 	for id := range cm.clients {
 		ids = append(ids, id)
@@ -446,12 +446,12 @@ type SessionStats struct {
 func (cm *ClientManager) GetSessionStats(sessionID string) (*SessionStats, bool) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	
+
 	client, exists := cm.clients[sessionID]
 	if !exists {
 		return nil, false
 	}
-	
+
 	stats := &SessionStats{
 		SessionID:    sessionID,
 		CreatedAt:    client.GetCreatedAt(),
@@ -460,7 +460,7 @@ func (cm *ClientManager) GetSessionStats(sessionID string) (*SessionStats, bool)
 		Age:          client.GetAge().String(),
 		IdleTime:     time.Since(client.GetLastUsedAt()).String(),
 	}
-	
+
 	return stats, true
 }
 
@@ -468,7 +468,7 @@ func (cm *ClientManager) GetSessionStats(sessionID string) (*SessionStats, bool)
 func (cm *ClientManager) GetAllSessionStats() map[string]SessionStats {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	
+
 	stats := make(map[string]SessionStats)
 	for sessionID, client := range cm.clients {
 		stats[sessionID] = SessionStats{
@@ -480,7 +480,7 @@ func (cm *ClientManager) GetAllSessionStats() map[string]SessionStats {
 			IdleTime:     time.Since(client.GetLastUsedAt()).String(),
 		}
 	}
-	
+
 	return stats
 }
 
@@ -488,22 +488,22 @@ func (cm *ClientManager) GetAllSessionStats() map[string]SessionStats {
 func (cm *ClientManager) CloseAll() {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	
+
 	if cm.closed {
 		return
 	}
-	
+
 	// Stop cleanup routine
 	if cm.config.EnableCleanup {
 		close(cm.cleanupStop)
 	}
-	
+
 	// Close all clients
 	for sessionID, client := range cm.clients {
 		client.Close()
 		delete(cm.clients, sessionID)
 	}
-	
+
 	cm.closed = true
 	cm.config.Logger.Info("Client manager closed", "closed_sessions", len(cm.clients))
 }
