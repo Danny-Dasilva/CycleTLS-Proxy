@@ -9,8 +9,8 @@
 <div align="center">
   <img src="assets/images/landing.png" alt="CycleTLS Proxy Interface" width="800" style="border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/>
 </div>
-
-**Advanced TLS Fingerprint Proxy Server** - A high-performance HTTP proxy that enables TLS fingerprint spoofing to mimic various browsers and clients. Built on top of [CycleTLS](https://github.com/Danny-Dasilva/CycleTLS), this proxy allows you to make HTTP requests while appearing as different browsers with authentic TLS signatures.
+<p align="center"> <strong>Advanced TLS Fingerprint Proxy Server </strong>  </p>
+  <p align="center">A high-performance HTTP proxy that enables TLS fingerprint spoofing to mimic various browsers and clients. Built on top of [CycleTLS](https://github.com/Danny-Dasilva/CycleTLS), this proxy allows you to make HTTP requests while appearing as different browsers with authentic TLS signatures.</p>
 
 ## Features
 
@@ -27,9 +27,11 @@
 
 ## Supported Browser Profiles
 
-<div align="center">
-  <img src="assets/images/default_profiles.png" alt="Available Browser Profiles" width="600" style="border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/>
+<div align="">
+  <img src="assets/images/default_profiles.png" alt="Available Browser Profiles" width="900" style="border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/>
 </div>
+
+<center>
 
 | Profile ID | Browser | Platform | TLS Version | HTTP Version |
 |------------|---------|----------|-------------|--------------|
@@ -42,6 +44,9 @@
 | `edge` | Edge 120 | Windows | 1.3 | h2 |
 | `okhttp` | OkHttp 4.12.0 | Android | 1.3 | h2 |
 | `chrome_legacy_tls12` | Chrome 91 | Windows | 1.2 | h2 |
+
+</center>
+
 
 ## Quick Start
 
@@ -110,7 +115,8 @@ curl -X POST \
 ## API Documentation
 
 <div align="center">
-  <img src="assets/images/documentation.png" alt="API Documentation Interface" width="700" style="border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/>
+    <img src="assets/images/documentation.png" alt="API Documentation Interface" width="900" style="border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/>
+
 </div>
 
 ### Headers
