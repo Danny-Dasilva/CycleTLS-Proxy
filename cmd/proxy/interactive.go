@@ -23,6 +23,7 @@ const (
 	ModeMenu AppMode = iota
 	ModeParamBrowser
 	ModeProfiles
+	ModeAddProfile
 	ModeServer
 	ModeConfig
 	ModeMonitor
@@ -50,6 +51,7 @@ type InteractiveApp struct {
 	// Sub-models
 	paramBrowserModel models.ParamBrowserModel
 	profileModel      models.ProfileModel
+	addProfileModel   models.AddProfileModel
 	configModel       models.ConfigModel
 	monitorModel      models.MonitorModel
 	logo              *models.GradientLogo
@@ -73,10 +75,14 @@ func NewInteractiveApp(port string, logger *log.Logger, logChannel chan proxy.Re
 
 	// Create monitor model with or without handler reference
 	var monitorModel models.MonitorModel
+	var rotator *fingerprints.ProfileRotator
 	if len(handler) > 0 && handler[0] != nil {
 		monitorModel = models.NewMonitorModelWithHandler(handler[0], monitorChannel)
+		rotator = handler[0].GetRotator()
 	} else {
 		monitorModel = models.NewMonitorModel()
+		// For non-server mode, create a default rotator
+		rotator = fingerprints.NewProfileRotator(nil)
 	}
 
 	app := &InteractiveApp{
@@ -86,7 +92,8 @@ func NewInteractiveApp(port string, logger *log.Logger, logChannel chan proxy.Re
 		profiles: profiles,
 
 		paramBrowserModel: models.NewParamBrowserModel(port),
-		profileModel:      models.NewProfileModel(profiles),
+		profileModel:      models.NewProfileModel(profiles, rotator),
+		addProfileModel:   models.NewAddProfileModel(),
 		configModel:       models.NewConfigModel(),
 		monitorModel:      monitorModel,
 		logo:              models.NewGradientLogo(0, 0),
@@ -179,6 +186,9 @@ func (m *InteractiveApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.profileModel, cmd = m.profileModel.Update(msg)
 		cmds = append(cmds, cmd)
 
+		m.addProfileModel, cmd = m.addProfileModel.Update(msg)
+		cmds = append(cmds, cmd)
+
 		m.configModel, cmd = m.configModel.Update(msg)
 		cmds = append(cmds, cmd)
 
@@ -244,8 +254,19 @@ func (m *InteractiveApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case ModeProfiles:
+		// Check for switch to add profile message
+		if _, ok := msg.(models.SwitchToAddProfileMsg); ok {
+			m.mode = ModeAddProfile
+			return m, nil
+		}
+		
 		var cmd tea.Cmd
 		m.profileModel, cmd = m.profileModel.Update(msg)
+		return m, cmd
+
+	case ModeAddProfile:
+		var cmd tea.Cmd
+		m.addProfileModel, cmd = m.addProfileModel.Update(msg)
 		return m, cmd
 
 	case ModeConfig:
@@ -444,6 +465,8 @@ func (m *InteractiveApp) View() string {
 		return m.renderParamBrowser()
 	case ModeProfiles:
 		return m.renderProfiles()
+	case ModeAddProfile:
+		return m.renderAddProfile()
 	case ModeConfig:
 		return m.renderConfig()
 	case ModeMonitor:
@@ -1046,9 +1069,7 @@ func (m *InteractiveApp) renderParamBrowser() string {
 
 // renderProfiles renders the profiles view
 func (m *InteractiveApp) renderProfiles() string {
-	header := m.renderModeHeader("Browser Profiles", "Press [esc] to return to menu")
-	content := m.profileModel.View()
-	return header + "\n" + content
+	return m.profileModel.View()
 }
 
 // renderConfig renders the configuration view
@@ -1084,6 +1105,11 @@ func (m *InteractiveApp) renderModeHeader(title, subtitle string) string {
 		MarginBottom(1)
 
 	return titleStyle.Render(title) + "\n" + subtitleStyle.Render(subtitle)
+}
+
+// renderAddProfile renders the add profile form view  
+func (m *InteractiveApp) renderAddProfile() string {
+	return m.addProfileModel.View()
 }
 
 // renderGoodbye renders the goodbye message

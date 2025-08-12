@@ -11,11 +11,12 @@ import (
 // Profile represents a comprehensive TLS fingerprint profile containing
 // all necessary data to mimic a specific browser's TLS characteristics.
 type Profile struct {
-	// JA3 is the JA3 TLS fingerprint string
+	// JA3 is the JA3 TLS fingerprint string (deprecated, use JA4R instead)
 	JA3 string `json:"ja3"`
 
-	// JA4 is the JA4 TLS fingerprint string (newer standard)
-	JA4 string `json:"ja4"`
+	// JA4R is the JA4 Raw format TLS fingerprint string
+	// Format: <prefix>_<ciphers>_<extensions>_<signatures>
+	JA4R string `json:"ja4r"`
 
 	// UserAgent is the HTTP User-Agent header string
 	UserAgent string `json:"user_agent"`
@@ -37,9 +38,27 @@ type Profile struct {
 // for major browsers with current and accurate fingerprint data.
 func GetDefaultProfiles() map[string]Profile {
 	return map[string]Profile{
+		"chrome138": {
+			JA3:         "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+			JA4R:        "t13d1516h2_1301,1302,1303,c02b,c02f,c02c,c030,cca9,cca8,c013,c014,009c,009d,002f,0035_0000,0017,ff01,000a,000b,0023,0010,0005,000d,0012,0033,002d,002b,001b,0015_0403,0804,0401,0503,0805,0501,0806,0601",
+			UserAgent:   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+			HTTPVersion: "h2",
+			TLSVersion:  "1.3",
+			Description: "Google Chrome 138 on Linux",
+			Platform:    "Linux",
+		},
+		"chrome139": {
+			JA3:         "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0",
+			JA4R:        "t13d1516h2_1301,1302,1303,c02b,c02f,c02c,c030,cca9,cca8,c013,c014,009c,009d,002f,0035_0000,0017,ff01,000a,000b,0023,0010,0005,000d,0012,0033,002d,002b,001b,44cd,0015_0403,0804,0401,0503,0805,0501,0806,0601",
+			UserAgent:   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+			HTTPVersion: "h2",
+			TLSVersion:  "1.3",
+			Description: "Google Chrome 139 on Linux",
+			Platform:    "Linux",
+		},
 		"chrome": {
 			JA3:         "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,45-27-23-10-13-35-5-65037-16-51-0-18-43-11-17513-65281,29-23-24,0",
-			JA4:         "t13d1517h2_8daaf6152771_7e51fdad25f2",
+			JA4R:        "t13d1517h2_1301,1302,1303,c02b,c02f,c02c,c030,cca9,cca8,c013,c014,009c,009d,002f,0035_002d,001b,0017,0000,0010,000a,000b,0023,0005,000d,0012,0033,002b,ff01,000f,0019,001c,0039_0403,0804,0401,0503,0805,0501,0806,0601",
 			UserAgent:   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 			HTTPVersion: "h2",
 			TLSVersion:  "1.3",
@@ -48,7 +67,7 @@ func GetDefaultProfiles() map[string]Profile {
 		},
 		"chrome_windows": {
 			JA3:         "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,45-27-23-10-13-35-5-65037-16-51-0-18-43-11-17513-65281-21,29-23-24,0",
-			JA4:         "t13d1517h2_8daaf6152771_3c1b64d5e4f2",
+			JA4R:        "t13d1517h2_1301,1302,1303,c02b,c02f,c02c,c030,cca9,cca8,c013,c014,009c,009d,002f,0035_002d,001b,0017,0000,0010,000a,000b,0023,0005,000d,0012,0033,002b,ff01,000f,0019,001c,0039,0015_0403,0804,0401,0503,0805,0501,0806,0601",
 			UserAgent:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 			HTTPVersion: "h2",
 			TLSVersion:  "1.3",
@@ -57,7 +76,7 @@ func GetDefaultProfiles() map[string]Profile {
 		},
 		"firefox": {
 			JA3:         "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-16-5-34-51-43-13-45-28-65037,29-23-24-25-256-257,0",
-			JA4:         "t13d1717h2_5b57614c22b0_f2748d6cd58d",
+			JA4R:        "t13d1717h2_1301,1303,1302,c02b,c02f,cca9,cca8,c02c,c030,c00a,c009,c013,c014,009c,009d,002f,0035,000a_0000,0017,ff01,000a,000b,0010,0005,0022,0033,002d,002b,000d,001c,0039_0403,0804,0401,0503,0805,0501,0806,0601,0203,0201",
 			UserAgent:   "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0",
 			HTTPVersion: "h2",
 			TLSVersion:  "1.3",
@@ -66,7 +85,7 @@ func GetDefaultProfiles() map[string]Profile {
 		},
 		"firefox_windows": {
 			JA3:         "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53-10,0-23-65281-10-11-16-5-34-51-43-13-45-28-65037-21,29-23-24-25-256-257,0",
-			JA4:         "t13d1717h2_5b57614c22b0_8f2c4d6e5a3b",
+			JA4R:        "t13d1717h2_1301,1303,1302,c02b,c02f,cca9,cca8,c02c,c030,c00a,c009,c013,c014,009c,009d,002f,0035,000a_0000,0017,ff01,000a,000b,0010,0005,0022,0033,002d,002b,000d,001c,0039,0015_0403,0804,0401,0503,0805,0501,0806,0601,0203,0201",
 			UserAgent:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
 			HTTPVersion: "h2",
 			TLSVersion:  "1.3",
@@ -75,7 +94,7 @@ func GetDefaultProfiles() map[string]Profile {
 		},
 		"safari_ios": {
 			JA3:         "771,4865-4866-4867-49196-49195-52393-49200-49199-52392-49162-157-156-53-47-49160-49170-10,0-23-65281-10-11-16-5-13-18-51-45-43-27-21,29-23-24-25,0",
-			JA4:         "t13d1516h2_8daaf6152771_b0da82dd1658",
+			JA4R:        "t13d1516h2_1301,1302,1303,c02c,c02b,cca9,c030,c02f,cca8,c00a,009d,009c,0035,002f,c008,c012,000a_0000,0017,ff01,000a,000b,0010,0005,000d,0012,0033,002d,002b,001b,0015_0403,0804,0401,0503,0805,0501,0806,0601",
 			UserAgent:   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1.1 Mobile/15E148 Safari/604.1",
 			HTTPVersion: "h2",
 			TLSVersion:  "1.3",
@@ -84,7 +103,7 @@ func GetDefaultProfiles() map[string]Profile {
 		},
 		"safari": {
 			JA3:         "771,4865-4866-4867-49196-49195-52393-49200-49199-52392-49162-49161-49171-49172-156-157-47-53,65281-0-23-13-5-18-16-30032-11-10-35-22-23,29-23-24,0",
-			JA4:         "t13d1516h2_8daaf6152771_9b3e7c5a2f1d",
+			JA4R:        "t13d1516h2_1301,1302,1303,c02c,c02b,cca9,c030,c02f,cca8,c00a,c009,c013,c014,009c,009d,002f,0035_ff01,0000,0017,000d,0005,0012,0010,7570,000b,000a,0023,0016,0017_0403,0804,0401,0503,0805,0501,0806,0601",
 			UserAgent:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
 			HTTPVersion: "h2",
 			TLSVersion:  "1.3",
@@ -93,7 +112,7 @@ func GetDefaultProfiles() map[string]Profile {
 		},
 		"edge": {
 			JA3:         "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,45-27-23-10-13-35-5-65037-16-51-0-18-43-11-17513-65281-28,29-23-24,0",
-			JA4:         "t13d1517h2_8daaf6152771_c4f8a2d7e3b1",
+			JA4R:        "t13d1517h2_1301,1302,1303,c02b,c02f,c02c,c030,cca9,cca8,c013,c014,009c,009d,002f,0035_002d,001b,0017,000a,000d,0023,0005,ff01,0010,000b,0033,002b,0000,0012,001c,0039,001c_0403,0804,0401,0503,0805,0501,0806,0601",
 			UserAgent:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
 			HTTPVersion: "h2",
 			TLSVersion:  "1.3",
@@ -102,7 +121,7 @@ func GetDefaultProfiles() map[string]Profile {
 		},
 		"okhttp": {
 			JA3:         "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27,29-23-24,0",
-			JA4:         "t13d1517h2_8daaf6152771_6a9c3e5f1b8d",
+			JA4R:        "t13d1517h2_1301,1302,1303,c02b,c02f,c02c,c030,cca9,cca8,c013,c014,009c,009d,002f,0035_0000,0017,ff01,000a,000b,0023,0010,0005,000d,0012,0033,002d,002b,001b_0403,0804,0401,0503,0805,0501,0806,0601",
 			UserAgent:   "okhttp/4.12.0",
 			HTTPVersion: "h2",
 			TLSVersion:  "1.3",
@@ -111,7 +130,7 @@ func GetDefaultProfiles() map[string]Profile {
 		},
 		"chrome_legacy_tls12": {
 			JA3:         "771,49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53-10,65281-0-23-35-13-5-18-16-11-51-45-43-10-27-21,29-23-24,0",
-			JA4:         "t12d1209h2_d34a8e72043a_b39be8c56a14",
+			JA4R:        "t12d1209h2_c02b,c02f,c02c,c030,cca9,cca8,c013,c014,009c,009d,002f,0035,000a_ff01,0000,0017,0023,000d,0005,0012,0010,000b,0033,002d,002b,000a,001b,0015_0403,0804,0401,0503,0805,0501,0806,0601",
 			UserAgent:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
 			HTTPVersion: "h2",
 			TLSVersion:  "1.2",

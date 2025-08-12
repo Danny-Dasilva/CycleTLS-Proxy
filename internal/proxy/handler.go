@@ -105,6 +105,7 @@ type Handler struct {
 	logChannel     chan RequestLogEntry // optional channel for real-time logging
 	monitorChannel chan MonitorEvent    // optional channel for monitoring events
 	metrics        *ServerMetrics       // real-time metrics tracking
+	rotator        *fingerprints.ProfileRotator // profile rotation engine
 }
 
 // NewHandler creates a new proxy handler with default configuration.
@@ -116,6 +117,7 @@ func NewHandler(logger *log.Logger) *Handler {
 		logger:         logger,
 		defaultTimeout: 30 * time.Second,
 		metrics:        newServerMetrics(),
+		rotator:        fingerprints.NewProfileRotator(fingerprints.DefaultRotationConfig()),
 	}
 }
 
@@ -128,6 +130,7 @@ func NewHandlerWithLogChannel(logger *log.Logger, logChannel chan RequestLogEntr
 		defaultTimeout: 30 * time.Second,
 		logChannel:     logChannel,
 		metrics:        newServerMetrics(),
+		rotator:        fingerprints.NewProfileRotator(fingerprints.DefaultRotationConfig()),
 	}
 }
 
@@ -141,6 +144,7 @@ func NewHandlerWithChannels(logger *log.Logger, logChannel chan RequestLogEntry,
 		logChannel:     logChannel,
 		monitorChannel: monitorChannel,
 		metrics:        newServerMetrics(),
+		rotator:        fingerprints.NewProfileRotator(fingerprints.DefaultRotationConfig()),
 	}
 }
 
@@ -161,7 +165,7 @@ func NewHandlerWithChannels(logger *log.Logger, logChannel chan RequestLogEntry,
 //
 //	Advanced TLS headers:
 //	- X-JA3: Custom JA3 TLS fingerprint string (overrides profile JA3)
-//	- X-JA4: Custom JA4 TLS fingerprint token (overrides profile JA4)
+//	- X-JA4R: Custom JA4R TLS fingerprint string (overrides profile JA4R)
 //	- X-HTTP2-FINGERPRINT: HTTP/2 connection settings fingerprint
 //	- X-USER-AGENT: Custom user agent string (overrides profile User-Agent)
 //
@@ -194,7 +198,7 @@ func (h *Handler) HandleRequest(ctx *fasthttp.RequestCtx) {
 	}
 
 	// Get fingerprint profile
-	profile, err := h.getProfile(headers.Identifier)
+	profile, actualProfileID, err := h.getProfile(headers.Identifier, headers.SessionID)
 	if err != nil {
 		availableProfiles := strings.Join(h.getProfileNames(), ", ")
 		h.sendError(ctx, fasthttp.StatusBadRequest,
@@ -202,8 +206,8 @@ func (h *Handler) HandleRequest(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Log incoming request
-	h.logRequest(ctx, headers)
+	// Log incoming request (with actual profile used)
+	h.logRequest(ctx, headers, actualProfileID)
 
 	// Get or create client for this session
 	client := h.getClient(headers.SessionID)
@@ -228,11 +232,11 @@ func (h *Handler) HandleRequest(ctx *fasthttp.RequestCtx) {
 		// Track failed request metrics
 		duration := time.Since(start)
 		h.updateMetrics(fasthttp.StatusBadGateway, duration, 0)
-		h.sendRequestLog(ctx, headers, fasthttp.StatusBadGateway, duration)
+		h.sendRequestLog(ctx, headers, fasthttp.StatusBadGateway, duration, actualProfileID)
 		h.sendMonitorEvent("request_error", RequestEventData{
 			Method:     string(ctx.Method()),
 			URL:        headers.TargetURL,
-			Profile:    headers.Identifier,
+			Profile:    actualProfileID,
 			Status:     fasthttp.StatusBadGateway,
 			Duration:   duration,
 			SessionID:  headers.SessionID,
@@ -247,11 +251,11 @@ func (h *Handler) HandleRequest(ctx *fasthttp.RequestCtx) {
 	// Track metrics and send events
 	duration := time.Since(start)
 	h.updateMetrics(response.Status, duration, len(response.Body))
-	h.sendRequestLog(ctx, headers, response.Status, duration)
+	h.sendRequestLog(ctx, headers, response.Status, duration, actualProfileID)
 	h.sendMonitorEvent("request", RequestEventData{
 		Method:     string(ctx.Method()),
 		URL:        headers.TargetURL,
-		Profile:    headers.Identifier,
+		Profile:    actualProfileID,
 		Status:     response.Status,
 		Duration:   duration,
 		SessionID:  headers.SessionID,
@@ -269,7 +273,7 @@ type RequestHeaders struct {
 
 	// Advanced TLS parameters
 	JA3              string
-	JA4              string
+	JA4R             string
 	HTTP2Fingerprint string
 	CustomUserAgent  string
 
@@ -320,7 +324,7 @@ func (h *Handler) extractHeaders(ctx *fasthttp.RequestCtx) (*RequestHeaders, err
 
 	// Extract advanced TLS parameters
 	headers.JA3 = string(ctx.Request.Header.Peek("X-JA3"))
-	headers.JA4 = string(ctx.Request.Header.Peek("X-JA4"))
+	headers.JA4R = string(ctx.Request.Header.Peek("X-JA4R"))
 	headers.HTTP2Fingerprint = string(ctx.Request.Header.Peek("X-HTTP2-FINGERPRINT"))
 	headers.CustomUserAgent = string(ctx.Request.Header.Peek("X-USER-AGENT"))
 
@@ -365,17 +369,24 @@ func (h *Handler) validateURL(targetURL string) error {
 	return nil
 }
 
-// getProfile retrieves a fingerprint profile by identifier
-func (h *Handler) getProfile(identifier string) (fingerprints.Profile, error) {
-	h.mu.RLock()
-	profile, exists := h.profiles[identifier]
-	h.mu.RUnlock()
+// getProfile retrieves a fingerprint profile by identifier, supporting rotation
+func (h *Handler) getProfile(identifier string, sessionID string) (fingerprints.Profile, string, error) {
+	// Handle rotation identifiers
+	switch identifier {
+	case "auto-rotate", "random":
+		return h.rotator.GetProfileForSession(sessionID)
+	default:
+		// Regular profile lookup
+		h.mu.RLock()
+		profile, exists := h.profiles[identifier]
+		h.mu.RUnlock()
 
-	if !exists {
-		return fingerprints.Profile{}, fmt.Errorf("profile '%s' not found", identifier)
+		if !exists {
+			return fingerprints.Profile{}, "", fmt.Errorf("profile '%s' not found", identifier)
+		}
+
+		return profile, identifier, nil
 	}
-
-	return profile, nil
 }
 
 // getClient returns a CycleTLS client for the given session ID, creating one if needed.
@@ -409,11 +420,12 @@ func (h *Handler) getClient(sessionID string) *cycletls.CycleTLS {
 }
 
 // logRequest logs the incoming request with relevant details
-func (h *Handler) logRequest(ctx *fasthttp.RequestCtx, headers *RequestHeaders) {
+func (h *Handler) logRequest(ctx *fasthttp.RequestCtx, headers *RequestHeaders, actualProfileID string) {
 	h.logger.Info("Processing proxy request",
 		"method", string(ctx.Method()),
 		"target_url", headers.TargetURL,
 		"identifier", headers.Identifier,
+		"actual_profile", actualProfileID,
 		"session_id", headers.SessionID,
 		"has_proxy", headers.Proxy != "",
 		"timeout", headers.Timeout,
@@ -436,12 +448,11 @@ func (h *Handler) buildRequestOptions(ctx *fasthttp.RequestCtx, profile fingerpr
 		options.Ja3 = profile.JA3
 	}
 
-	// Use custom JA4 if provided, otherwise use profile JA4 (if available)
-	// Note: JA4 support depends on CycleTLS library version
-	if headers.JA4 != "" {
-		// options.Ja4 = headers.JA4  // Enable when supported
-	} else if profile.JA4 != "" {
-		// options.Ja4 = profile.JA4  // Enable when supported
+	// Use custom JA4R if provided, otherwise use profile JA4R
+	if headers.JA4R != "" {
+		options.Ja4r = headers.JA4R
+	} else if profile.JA4R != "" {
+		options.Ja4r = profile.JA4R
 	}
 
 	// Use custom User-Agent if provided, otherwise use profile User-Agent
@@ -624,6 +635,21 @@ func (h *Handler) GetSessionIDs() []string {
 	return ids
 }
 
+// GetRotator returns the profile rotator for external configuration
+func (h *Handler) GetRotator() *fingerprints.ProfileRotator {
+	return h.rotator
+}
+
+// UpdateRotatorConfig updates the rotator configuration
+func (h *Handler) UpdateRotatorConfig(config *fingerprints.RotationConfig) {
+	h.rotator.UpdateConfig(config)
+}
+
+// GetRotationStats returns current rotation statistics
+func (h *Handler) GetRotationStats() map[string]interface{} {
+	return h.rotator.GetRotationStats()
+}
+
 // SetDefaultTimeout sets the default timeout for requests
 func (h *Handler) SetDefaultTimeout(timeout time.Duration) {
 	h.mu.Lock()
@@ -683,7 +709,7 @@ func (h *Handler) Close() {
 }
 
 // sendRequestLog sends a request log entry to the log channel if available
-func (h *Handler) sendRequestLog(ctx *fasthttp.RequestCtx, headers *RequestHeaders, status int, duration time.Duration) {
+func (h *Handler) sendRequestLog(ctx *fasthttp.RequestCtx, headers *RequestHeaders, status int, duration time.Duration, actualProfileID string) {
 	if h.logChannel == nil {
 		return
 	}
@@ -693,7 +719,7 @@ func (h *Handler) sendRequestLog(ctx *fasthttp.RequestCtx, headers *RequestHeade
 		Timestamp:  time.Now(),
 		Method:     string(ctx.Method()),
 		URL:        headers.TargetURL,
-		Profile:    headers.Identifier,
+		Profile:    actualProfileID,
 		Status:     status,
 		Duration:   duration,
 		SessionID:  headers.SessionID,
