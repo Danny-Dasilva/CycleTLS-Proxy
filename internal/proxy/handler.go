@@ -175,6 +175,7 @@ func NewHandlerWithChannels(logger *log.Logger, logChannel chan RequestLogEntry,
 //	- X-FORCE-HTTP1: Force HTTP/1.1 protocol usage (true/false)
 //	- X-FORCE-HTTP3: Force HTTP/3/QUIC protocol usage (true/false)
 //	- X-ENABLE-CONNECTION-REUSE: Enable TCP connection reuse (true/false)
+//	- X-TLS13-AUTORETRY: Automatically retry with TLS 1.3 compatible curves (true/false)
 func (h *Handler) HandleRequest(ctx *fasthttp.RequestCtx) {
 	// Handle health check endpoint
 	if string(ctx.Path()) == "/health" {
@@ -211,6 +212,12 @@ func (h *Handler) HandleRequest(ctx *fasthttp.RequestCtx) {
 
 	// Get or create client for this session
 	client := h.getClient(headers.SessionID)
+	
+	// Close temporary clients (empty session ID) after the request
+	isTemporaryClient := headers.SessionID == ""
+	if isTemporaryClient {
+		defer client.Close()
+	}
 
 	// Build request options from profile and headers
 	options, err := h.buildRequestOptions(ctx, profile, headers)
@@ -283,6 +290,7 @@ type RequestHeaders struct {
 	ForceHTTP1      bool
 	ForceHTTP3      bool
 	ConnectionReuse bool
+	TLS13AutoRetry  bool
 }
 
 // extractHeaders extracts and validates all X-* configuration headers from the request
@@ -295,11 +303,8 @@ func (h *Handler) extractHeaders(ctx *fasthttp.RequestCtx) (*RequestHeaders, err
 		return nil, fmt.Errorf("X-URL header is required")
 	}
 
-	// Extract X-IDENTIFIER (optional, defaults to 'chrome')
+	// Extract X-IDENTIFIER (optional)
 	headers.Identifier = string(ctx.Request.Header.Peek("X-IDENTIFIER"))
-	if headers.Identifier == "" {
-		headers.Identifier = "chrome"
-	}
 
 	// Extract X-SESSION-ID (optional)
 	headers.SessionID = string(ctx.Request.Header.Peek("X-SESSION-ID"))
@@ -348,6 +353,10 @@ func (h *Handler) extractHeaders(ctx *fasthttp.RequestCtx) (*RequestHeaders, err
 		headers.ConnectionReuse = strings.ToLower(connReuseStr) == "true"
 	}
 
+	if tls13AutoRetryStr := string(ctx.Request.Header.Peek("X-TLS13-AUTORETRY")); tls13AutoRetryStr != "" {
+		headers.TLS13AutoRetry = strings.ToLower(tls13AutoRetryStr) == "true"
+	}
+
 	return headers, nil
 }
 
@@ -371,7 +380,16 @@ func (h *Handler) validateURL(targetURL string) error {
 
 // getProfile retrieves a fingerprint profile by identifier, supporting rotation
 func (h *Handler) getProfile(identifier string, sessionID string) (fingerprints.Profile, string, error) {
-	// Handle rotation identifiers
+	// Handle empty identifier - use rotation if enabled, otherwise fallback
+	if identifier == "" {
+		if h.rotator.IsRotationEnabled() {
+			return h.rotator.GetProfileForSession(sessionID)
+		}
+		// Fallback to chrome when rotation is disabled
+		identifier = "chrome"
+	}
+	
+	// Handle explicit rotation identifiers
 	switch identifier {
 	case "auto-rotate", "random":
 		return h.rotator.GetProfileForSession(sessionID)
@@ -478,10 +496,10 @@ func (h *Handler) buildRequestOptions(ctx *fasthttp.RequestCtx, profile fingerpr
 		options.InsecureSkipVerify = true
 	}
 
-	// Set connection reuse
-	// Note: Connection reuse is typically handled at the client level
+	// Set connection reuse - enable by default for better performance and connection management
+	options.EnableConnectionReuse = true
 	if headers.ConnectionReuse {
-		// Connection reuse configuration may vary by CycleTLS version
+		options.EnableConnectionReuse = true
 	}
 
 	// Handle HTTP version forcing
@@ -492,17 +510,31 @@ func (h *Handler) buildRequestOptions(ctx *fasthttp.RequestCtx, profile fingerpr
 		options.ForceHTTP1 = true
 	}
 	if headers.ForceHTTP3 {
-		// Note: HTTP/3 forcing may not be available in all CycleTLS versions
-		// options.ForceHttp3 = true
+		options.ForceHTTP3 = true
 	}
 
-	// Forward all non-X-* headers to target server
+	// Set TLS 1.3 Auto Retry based on header value
+	options.TLS13AutoRetry = headers.TLS13AutoRetry
+
+	// Forward all non-X-* headers to target server, except problematic ones
 	ctx.Request.Header.VisitAll(func(key, value []byte) {
 		headerName := string(key)
-		// Skip configuration headers (X-* headers)
-		if !strings.HasPrefix(strings.ToUpper(headerName), "X-") {
-			options.Headers[headerName] = string(value)
+		lowerName := strings.ToLower(headerName)
+		
+		// Skip configuration headers (X-* headers) and proxy-specific headers
+		if strings.HasPrefix(strings.ToUpper(headerName), "X-") {
+			return
 		}
+		
+		// Skip headers that should be set by CycleTLS or cause issues
+		if lowerName == "host" || 
+		   lowerName == "content-length" || 
+		   lowerName == "connection" ||
+		   lowerName == "transfer-encoding" {
+			return
+		}
+		
+		options.Headers[headerName] = string(value)
 	})
 
 	// Override User-Agent header with the selected one

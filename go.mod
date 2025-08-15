@@ -1,11 +1,11 @@
 module github.com/Danny-Dasilva/CycleTLS-Proxy
 
-go 1.24
+go 1.24.0
 
 toolchain go1.24.5
 
 require (
-	github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.27
+	github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.29
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/lipgloss v1.1.0
@@ -41,8 +41,8 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.23.4 // indirect
-	github.com/quic-go/qpack v0.4.0 // indirect
-	github.com/quic-go/quic-go v0.41.0 // indirect
+	github.com/quic-go/qpack v0.5.1 // indirect
+	github.com/quic-go/quic-go v0.54.0 // indirect
 	github.com/refraction-networking/uquic v0.0.6 // indirect
 	github.com/refraction-networking/utls v1.8.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -52,7 +52,7 @@ require (
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/mock v0.5.2 // indirect
 	golang.org/x/crypto v0.41.0 // indirect
-	golang.org/x/exp v0.0.0-20250811191247-51f88131bc50 // indirect
+	golang.org/x/exp v0.0.0-20250813145105-42675adae3e6 // indirect
 	golang.org/x/exp/shiny v0.0.0-20250811191247-51f88131bc50 // indirect
 	golang.org/x/image v0.30.0 // indirect
 	golang.org/x/mobile v0.0.0-20250808145247-395d808d53cd // indirect

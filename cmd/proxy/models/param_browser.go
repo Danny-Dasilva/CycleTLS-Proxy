@@ -241,6 +241,16 @@ func NewParamBrowserModel(port string) ParamBrowserModel {
 			Complexity:      "yellow",
 			ComplexityLevel: 2,
 		},
+		Parameter{
+			Name:            "X-TLS13-AUTORETRY",
+			Required:        false,
+			Desc:            "Automatically retry with TLS 1.3 compatible curves",
+			Example:         "true",
+			CurlExample:     fmt.Sprintf(`curl -H "X-URL: https://httpbin.org/ip" -H "X-TLS13-AUTORETRY: true" http://localhost:%s`, port),
+			Category:        "Connection",
+			Complexity:      "yellow",
+			ComplexityLevel: 2,
+		},
 	}
 
 	// Create list with custom delegate for better formatting
@@ -743,7 +753,7 @@ func (m ParamBrowserModel) getUsageNotes(param Parameter) string {
 	case "X-URL":
 		notes.WriteString(noteStyle.Render("💬 This parameter is required for all requests. Must be a valid HTTP/HTTPS URL."))
 	case "X-IDENTIFIER":
-		notes.WriteString(noteStyle.Render("💬 Available profiles: chrome, firefox, safari_ios, safari, edge, okhttp, chrome_windows, firefox_windows, chrome_legacy_tls12"))
+		notes.WriteString(noteStyle.Render("💬 Available profiles: chrome138, chrome139, chrome, chrome_windows, firefox, firefox_windows, safari_ios, safari, edge, okhttp, chrome_legacy_tls12"))
 	case "X-SESSION-ID":
 		notes.WriteString(noteStyle.Render("💬 Use the same session ID across multiple requests to enable connection reuse and cookie persistence."))
 	case "X-JA3":
@@ -768,6 +778,8 @@ func (m ParamBrowserModel) getUsageNotes(param Parameter) string {
 		notes.WriteString(noteStyle.Render("💬 🟡 Forces HTTP/3 (QUIC) protocol. Experimental feature, may not work with all servers."))
 	case "X-ENABLE-CONNECTION-REUSE":
 		notes.WriteString(noteStyle.Render("💬 🟡 Enables TCP connection reuse for better performance across multiple requests."))
+	case "X-TLS13-AUTORETRY":
+		notes.WriteString(noteStyle.Render("💬 🟡 Automatically retries connections with TLS 1.3 compatible curves when initial connection fails. Improves compatibility with TLS 1.3 servers."))
 	default:
 		notes.WriteString(noteStyle.Render("💬 This parameter modifies the TLS/HTTP behavior of your requests."))
 	}
