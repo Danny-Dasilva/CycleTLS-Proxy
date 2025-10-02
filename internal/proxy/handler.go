@@ -415,7 +415,7 @@ func (h *Handler) getClient(sessionID string) *cycletls.CycleTLS {
 
 	// Return new client for empty session ID (one-time use)
 	if sessionID == "" {
-		client := cycletls.Init()
+		client := cycletls.Init(cycletls.WithRawBytes())
 		return &client
 	}
 
@@ -426,7 +426,7 @@ func (h *Handler) getClient(sessionID string) *cycletls.CycleTLS {
 	}
 
 	// Create new client for this session
-	client := cycletls.Init()
+	client := cycletls.Init(cycletls.WithRawBytes())
 	h.clients[sessionID] = &client
 
 	h.logger.Debug("Created new session",

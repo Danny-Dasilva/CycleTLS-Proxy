@@ -30,7 +30,7 @@ type Client struct {
 // NewClient creates a new CycleTLS client wrapper with session management capabilities.
 // If sessionID is empty, creates a temporary client for one-time use.
 func NewClient(sessionID string) *Client {
-	client := cycletls.Init()
+	client := cycletls.Init(cycletls.WithRawBytes())
 	now := time.Now()
 
 	return &Client{
