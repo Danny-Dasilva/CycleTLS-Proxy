@@ -147,6 +147,8 @@ All proxy requests are configured using HTTP headers:
 
 - **`X-TIMEOUT`** - Request timeout in seconds (1-300, default: 30)
   - Example: `X-TIMEOUT: 60`
+- **`X-TLS13-AUTORETRY`** - Automatically retry with TLS 1.3 compatible curves (true/false, default: false)
+  - Example: `X-TLS13-AUTORETRY: true`
 
 #### Standard HTTP Headers
 
