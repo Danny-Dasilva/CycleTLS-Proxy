@@ -10,6 +10,8 @@ git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999/go.mod h1:fPE2ZNJGy
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.29 h1:tB8K2mHypOVYe9vB3QyiAgZiNbIAcxwXGv3Oh/uNcR4=
 github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.29/go.mod h1:uLgl93R8am9dUvj+9pAI3pTwsmRKmFeWzz3eaN9HrQw=
+github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.30 h1:MUrYvIPkb4D83p16LKt7csGjhAF2JIeCdjtzhjm7doY=
+github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.30/go.mod h1:uLgl93R8am9dUvj+9pAI3pTwsmRKmFeWzz3eaN9HrQw=
 github.com/Danny-Dasilva/fhttp v0.0.0-20240217042913-eeeb0b347ce1 h1:/lqhaiz7xdPr6kuaW1tQ/8DdpWdxkdyd9W/6EHz4oRw=
 github.com/Danny-Dasilva/fhttp v0.0.0-20240217042913-eeeb0b347ce1/go.mod h1:Hvab/V/YKCDXsEpKYKHjAXH5IFOmoq9FsfxjztEqvDc=
 github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=

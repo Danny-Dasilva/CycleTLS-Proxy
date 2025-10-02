@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.5
 
 require (
-	github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.29
+	github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.30
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/lipgloss v1.1.0
